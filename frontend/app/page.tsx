@@ -4,10 +4,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { base64FromInt16, int16FromBase64 } from "@/lib/audio-codec";
 
-type TranscriptLine = { role: "user" | "assistant"; text: string; final: boolean };
+type TranscriptLine = {
+  role: "user" | "assistant";
+  text: string;
+  final: boolean;
+  ts: number; // epoch ms, set at first observation of this line
+};
 
 const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/interview-demo";
+
+function fmtTs(ms: number): string {
+  const d = new Date(ms);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
 
 // --- page ------------------------------------------------------------------
 export default function InterviewDemoPage() {
@@ -26,13 +39,15 @@ export default function InterviewDemoPage() {
 
   const appendTranscript = useCallback((line: TranscriptLine) => {
     setTranscript((prev) => {
-      // Coalesce non-final partials per role
+      // Coalesce non-final partials per role; preserve the original ts of
+      // the ongoing line so the UI timestamp is the moment that *line*
+      // started, not the last partial update.
       const last = prev[prev.length - 1];
       if (last && last.role === line.role && !last.final && !line.final) {
-        return [...prev.slice(0, -1), line];
+        return [...prev.slice(0, -1), { ...line, ts: last.ts }];
       }
       if (last && last.role === line.role && !last.final && line.final) {
-        return [...prev.slice(0, -1), line];
+        return [...prev.slice(0, -1), { ...line, ts: last.ts }];
       }
       return [...prev, line];
     });
@@ -81,6 +96,7 @@ export default function InterviewDemoPage() {
           role,
           text: typeof data.text === "string" ? data.text : "",
           final: data.is_final === true,
+          ts: Date.now(),
         });
       } else if (type === "bidi_connection_start") {
         setStatus("live");
@@ -130,13 +146,38 @@ export default function InterviewDemoPage() {
       const ws = new WebSocket(WS_URL);
       wsRef.current = ws;
 
+      // Mic-frame counter for diagnostics: lets us confirm in the browser
+      // console that the worklet is emitting frames continuously (even when
+      // the user is silent — VAD relies on seeing low-energy frames too).
+      let micFrameCount = 0;
+
       // Bind worklet message handler FIRST, but guard by ws readyState.
       // We also always update the UI level meter (regardless of ws state).
       node.port.onmessage = (evt) => {
         const { pcm, level } = evt.data as { pcm: Int16Array; level: number };
         setMicLevel(level);
         if (ws.readyState !== WebSocket.OPEN) return;
-        if (aiSpeakingRef.current) return; // don't send while AI is talking
+        micFrameCount++;
+        if (micFrameCount % 50 === 1) {
+          // 50 frames ~= 5s @ 100ms/frame. Watch this in DevTools console.
+          console.log(`[mic] sent ${micFrameCount} frames, last level=${level.toFixed(4)}`);
+        }
+        // Always stream mic to backend, even while AI is speaking.
+        //
+        // Why: Nova Sonic times out after 55s of no `audioInput` or
+        // `interactive content` (ValidationException InternalErrorCode=532).
+        // If we mute mic during AI speech, the quiet window (AI speaking +
+        // user listening + thinking + hesitating) easily exceeds 55s.
+        //
+        // Echo/self-capture is handled by two layers:
+        //   1. getUserMedia({ echoCancellation: true }) — browser AEC cancels
+        //      speaker output picked up by the mic.
+        //   2. Nova Sonic turn_detection — server-side VAD distinguishes
+        //      real user interruption from AI's own echo.
+        //
+        // The Twilio reference integration (sample-amazon-nova-sonic-twilio-
+        // integration/src/server.ts) also forwards every audio frame
+        // unconditionally; we match that behavior.
         ws.send(
           JSON.stringify({
             type: "bidi_audio_input",
@@ -271,6 +312,9 @@ export default function InterviewDemoPage() {
           )}
           {transcript.map((line, i) => (
             <div key={i} className="flex gap-3">
+              <span className="text-xs mt-1 text-neutral-500 font-mono min-w-[64px] tabular-nums">
+                {fmtTs(line.ts)}
+              </span>
               <span
                 className={`text-xs mt-1 ${
                   line.role === "assistant" ? "text-sky-400" : "text-emerald-400"

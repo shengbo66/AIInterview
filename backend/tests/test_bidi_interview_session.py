@@ -169,6 +169,43 @@ async def test_user_turn_before_any_question_is_dropped(db_with_huawei):
         assert answers == []
 
 
+async def test_multiple_user_finals_coalesce_to_single_answer(
+    db_with_huawei, mock_s3_upload
+):
+    """Regression: Nova Sonic can emit multiple is_final=True user transcripts
+    within the same user turn (each sentence / endpointed utterance).
+    They must UPDATE one Answer row, not attempt to INSERT new rows — the
+    UNIQUE constraint on answer.question_id would cause IntegrityError
+    and eventually crash the session.
+    """
+    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    await session.setup()
+
+    # AI asks Q1
+    await session.on_event({
+        "type": "bidi_transcript_stream", "role": "assistant",
+        "text": "请介绍你做过的射频项目。", "is_final": True,
+    })
+
+    # User answers in 3 endpointed fragments (common with Sonic VAD).
+    # Each fragment brings ~1s of buffered PCM.
+    for fragment in ["我做过5G射频模块,", "从需求分析开始,", "一直到测试验证。"]:
+        session.append_user_audio(b"\x00\x00" * 16000)  # 1s PCM16 @ 16kHz
+        await session.on_event({
+            "type": "bidi_transcript_stream", "role": "user",
+            "text": fragment, "is_final": True,
+        })
+
+    async with db_with_huawei() as db:
+        answers = (await db.execute(select(Answer))).scalars().all()
+        assert len(answers) == 1, "All fragments must coalesce to one Answer row"
+        a = answers[0]
+        # Text is concatenated in order of arrival
+        assert a.transcript_text == "我做过5G射频模块,从需求分析开始,一直到测试验证。"
+        # Duration is cumulative (~3s)
+        assert 2.8 < a.duration_sec < 3.2
+
+
 async def test_s3_upload_failure_does_not_break_persistence(
     db_with_huawei, monkeypatch
 ):

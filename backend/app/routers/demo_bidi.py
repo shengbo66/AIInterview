@@ -193,7 +193,18 @@ async def interview_demo(websocket: WebSocket) -> None:
         return data
 
     async def send(event):
-        """Forward to browser FIRST; persist in background to not block audio."""
+        """Forward to browser FIRST; persist in background to not block audio.
+
+        WS send failures are swallowed (logged only). Raising here would
+        propagate into `agent.run`'s output task, cancel the whole _TaskGroup,
+        and kill an otherwise-recoverable Strands session. In particular,
+        Strands auto-restarts Nova Sonic on `BidiConnectionRestartEvent`
+        (triggered by Nova's 175s internal timeout) — we must not abort that
+        recovery path just because the browser's WS is momentarily unhealthy.
+
+        The browser will simply not receive this event; persistence is
+        scheduled independently and is not affected.
+        """
         event_dict = event if isinstance(event, dict) else dict(event)
         ev_type = event_dict.get("type")
         if ev_type != "bidi_audio_stream":
@@ -201,8 +212,12 @@ async def interview_demo(websocket: WebSocket) -> None:
         try:
             await websocket.send_json(event_dict)
         except Exception:
-            logger.exception("ws.send_json failed type=%s", ev_type)
-            raise
+            # Don't re-raise: keep the Strands session alive even if the
+            # browser hangs up or the WS is in a transient bad state.
+            logger.warning(
+                "ws.send_json failed type=%s (swallowed to keep session alive)",
+                ev_type,
+            )
         task = asyncio.create_task(_persist_safe(session, event_dict))
         pending_tasks.add(task)
         task.add_done_callback(pending_tasks.discard)

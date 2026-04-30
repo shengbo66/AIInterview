@@ -618,3 +618,84 @@ async def test_interruption_does_not_leak_ai_audio(db_with_huawei, mock_s3_uploa
     call = mock_s3_upload.await_args
     uploaded = call.args[1]
     assert len(uploaded) == 1000, f"interruption didn't flush buffer: got {len(uploaded)} bytes"
+
+
+
+async def test_ws_send_failure_on_connection_restart_keeps_session_alive(
+    _huawei_in_mem_db, _patch_s3, _patch_agent
+) -> None:
+    """Regression (2026-04-30): previously a failed ws.send_json would re-raise
+    and kill the Strands session mid-recovery. Nova Sonic emits
+    BidiConnectionRestartEvent when its 175s internal idle timeout fires; if
+    we cannot forward that event (e.g. browser's WS is unhealthy), Strands
+    still auto-restarts the upstream connection. We must not abort that
+    recovery — the session should continue serving subsequent events.
+    """
+    from unittest.mock import patch
+
+    script: list[tuple[str, Any]] = [
+        ("emit", {"type": "bidi_connection_start", "connection_id": "fake"}),
+        ("wait_user_input", 1),
+        ("emit", {"type": "bidi_response_start"}),
+        ("emit", _transcript("assistant", "Q1", is_final=True)),
+        # Simulate Sonic timeout → Strands emits connection_restart.
+        # Our send() MUST NOT raise when the browser-side ws.send_json fails.
+        ("emit", {"type": "bidi_connection_restart"}),
+        ("emit", {"type": "bidi_response_start"}),
+        ("emit", _transcript("assistant", "Q2 after restart", is_final=True)),
+        ("emit", {"type": "bidi_usage", "inputTokens": 10, "outputTokens": 10,
+                  "totalTokens": 20}),
+    ]
+    _patch_agent["next_agent"] = FakeBidiAgent(script)
+
+    # Patch WebSocket.send_json to raise on the connection_restart event
+    # (simulating a browser that has hung up or is in a bad state).
+    original_send_json = None
+    calls_after_restart = {"count": 0}
+
+    async def flaky_send_json(self, payload):
+        t = payload.get("type") if isinstance(payload, dict) else None
+        if t == "bidi_connection_restart":
+            raise RuntimeError("simulated browser disconnect mid-restart")
+        # Track events the server tried to send AFTER the failure — proves
+        # the session survived.
+        if calls_after_restart.get("armed"):
+            calls_after_restart["count"] += 1
+        if t == "bidi_connection_restart":
+            calls_after_restart["armed"] = True
+        return await original_send_json(self, payload)
+
+    from starlette.websockets import WebSocket
+    original_send_json = WebSocket.send_json
+
+    received_types: list[str] = []
+    interview_id = None
+    with (
+        patch.object(WebSocket, "send_json", flaky_send_json),
+        TestClient(app) as client,
+        client.websocket_connect("/ws/interview-demo") as ws,
+    ):
+        try:
+            while True:
+                msg = ws.receive_json(mode="text")
+                received_types.append(msg.get("type", "?"))
+                if msg.get("type") == "session_ready":
+                    interview_id = msg.get("interview_id")
+        except Exception:
+            pass  # normal close after script ends
+
+    # Key assertion: Q2 was sent AFTER the restart event that caused send to
+    # raise. If our fix is missing, the session would have died on the
+    # connection_restart forwarding and Q2's transcript would never arrive.
+    assert "bidi_connection_start" in received_types
+    # We should see at least the transcript_stream events before and after
+    # (connection_restart itself was swallowed by the mock raise, by design).
+    assert received_types.count("bidi_transcript_stream") >= 2, (
+        f"expected >=2 transcripts, got {received_types}"
+    )
+
+    SF = _huawei_in_mem_db
+    async with SF() as db:
+        iv = await db.get(Interview, interview_id)
+        assert iv is not None
+        assert iv.status == "completed"

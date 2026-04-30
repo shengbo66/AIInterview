@@ -259,7 +259,21 @@ class BidiInterviewSession:
         logger.debug("patched Q audio key=%s", s3_key)
 
     async def _finalize_user_turn(self, text: str) -> None:
-        """Persist Answer. Q row is already committed in _finalize_assistant_turn."""
+        """Persist Answer for the current question.
+
+        Nova Sonic can emit MULTIPLE `is_final=True` user transcripts within
+        a single user turn (one per utterance / endpointed chunk). We must
+        coalesce these into a single Answer row per question_id, because
+        the Answer.question_id column has a UNIQUE constraint.
+
+        Strategy: UPSERT.
+          - First fragment: insert new Answer(transcript_text=text).
+          - Subsequent fragments for the same question: append to the
+            existing transcript_text and grow duration_sec.
+
+        The audio buffer (user_buf) is flushed on every fragment, so the
+        duration value is cumulative per fragment; we add it up.
+        """
         if self._last_question_id is None:
             logger.debug("user transcript before any question; dropping")
             self._user_buf.flush()
@@ -267,15 +281,32 @@ class BidiInterviewSession:
         question_id = self._last_question_id
         _pcm, duration = self._user_buf.flush()
         async with self._db_lock, self._sf() as db:
-            a = Answer(
-                question_id=question_id,
-                transcript_text=text,
-                duration_sec=duration,
-                user_audio_s3_key=None,
-            )
-            db.add(a)
+            existing = (
+                await db.execute(
+                    select(Answer).where(Answer.question_id == question_id)
+                )
+            ).scalar_one_or_none()
+            if existing is None:
+                a = Answer(
+                    question_id=question_id,
+                    transcript_text=text,
+                    duration_sec=duration,
+                    user_audio_s3_key=None,
+                )
+                db.add(a)
+                action = "inserted"
+            else:
+                existing.transcript_text = (
+                    f"{existing.transcript_text or ''}{text}"
+                    if existing.transcript_text
+                    else text
+                )
+                existing.duration_sec = (existing.duration_sec or 0.0) + duration
+                action = "appended"
             await db.commit()
-        logger.info("persisted A for Q=%s len=%s", question_id, len(text))
+        logger.info(
+            "persisted A for Q=%s len=%s action=%s", question_id, len(text), action
+        )
 
     # ---------------------------------------------------- input-side helpers
     def append_user_audio(self, pcm_bytes: bytes) -> None:
