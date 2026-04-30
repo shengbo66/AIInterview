@@ -4,8 +4,8 @@
 - **Project Name**: Interviewer (Mock Interview Platform)
 - **Project Type**: Greenfield
 - **Start Date**: 2026-04-25T21:14:51+08:00
-- **Last Session End**: 2026-04-30T16:11:40+08:00
-- **Current Stage**: **Sprint 2 in progress — 自动化测试打通 (58/58)，待浏览器手测验证**
+- **Last Session End**: 2026-04-30T23:05:00+08:00
+- **Current Stage**: **Sprint 2 COMPLETE ✅ → Sprint 3 STARTING (history UI + Claude evaluation)**
 
 ## Workflow Note
 正式 AIDLC unit-by-unit 流程（unit-1..unit-5）在 2026-04-28 与 PM review 之后**转向 Agile Sprint 模式**（walking skeleton → 增量迭代），理由：用户 3 天未接触产品，需要立即建立反馈闭环。原 AIDLC 设计文档（requirements, unit-of-work, unit-2-design）作为"北极星"保留，但执行按 Sprint 推进。
@@ -36,15 +36,19 @@
 - 单页 Next.js + AudioWorklet + WS + Nova Sonic 端到端
 - 用户第一次体验到产品
 
-**Sprint 2 持久化 + UI Polish + trouble shooting** — 🔄 代码完成，待验证 (2026-04-29~30)
+**Sprint 2 持久化 + UI Polish + 两个真 bug 修复** — ✅ COMPLETE (2026-04-29~30)
 - 持久化：Interview/Question/Answer 落库 + usage 计量
-- UI：AI 说话时 mic mute + level meter
+- UI：AI 说话状态显示 + timestamp + level meter
 - **故障排查 6 轮**才定位真因：**Nova Sonic 永不主动开口，必须 hello.pcm bootstrap**
 - 修复方案：`backend/assets/hello.pcm` (macOS `say`+ffmpeg 生成) → demo_bidi.py 的 recv() 先 yield hello chunks 再读 WS
+- 真实浏览器测试暴露第二批 bug（2026-04-30 后半段）：
+  - Answer UNIQUE constraint：user transcript 多段 is_final 被 insert 多次 → fix: UPSERT 合并
+  - ws.send_json 失败 raise 把 Strands restart 杀掉 → fix: swallow WS failure
 - 独立验证：`scripts/ws_smoke.py` 证明 backend pipeline 100% work
-- 自动化测试：24 → **58**（+142%），backend 52 pytest + frontend 6 vitest，全绿
+- 真实 12 分钟 45 轮浏览器面试顺畅完成（interview b34b3f9d）
+- 自动化测试：24 → **60**（+150%），54 pytest + 6 vitest，全绿
 
-**Sprint 3** — NOT STARTED
+**Sprint 3** — 🔄 STARTING (2026-04-30)
 - S2-3 历史列表 + 详情页
 - S2-4 评估报告（Claude 评分）
 

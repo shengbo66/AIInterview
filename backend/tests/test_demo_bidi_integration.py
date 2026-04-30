@@ -134,6 +134,18 @@ def _patch_s3(monkeypatch):
 
 
 @pytest.fixture
+def _patch_eval(monkeypatch):
+    """Mock evaluate_interview so TestClient tests don't fire real Claude calls."""
+    from unittest.mock import AsyncMock
+
+    mock = AsyncMock()
+    monkeypatch.setattr(
+        "app.routers.demo_bidi.evaluate_interview", mock
+    )
+    return mock
+
+
+@pytest.fixture
 def _patch_agent(monkeypatch):
     """Swap `_build_agent` so we can inject a scripted FakeBidiAgent."""
     state = {"next_agent": None}
@@ -169,7 +181,7 @@ def _transcript(role: str, text: str, is_final: bool = True) -> dict:
 
 
 async def test_full_conversation_two_qa_persists_and_forwards(
-    _huawei_in_mem_db, _patch_s3, _patch_agent
+    _huawei_in_mem_db, _patch_s3, _patch_agent, _patch_eval
 ) -> None:
     """End-to-end: FakeAgent does Q1→user answers→Q2→user answers→complete."""
     script: list[tuple[str, Any]] = [
@@ -377,7 +389,7 @@ async def test_setup_failure_closes_ws_with_error(
 # ============================================================================
 
 async def test_bootstrap_hello_injected_before_ws_audio(
-    _huawei_in_mem_db, _patch_s3, _patch_agent
+    _huawei_in_mem_db, _patch_s3, _patch_agent, _patch_eval
 ) -> None:
     """recv() must yield bootstrap hello chunks BEFORE reading any WS message.
 
@@ -413,7 +425,7 @@ async def test_bootstrap_hello_injected_before_ws_audio(
 
 
 async def test_bootstrap_triggers_session_without_client_audio(
-    _huawei_in_mem_db, _patch_s3, _patch_agent
+    _huawei_in_mem_db, _patch_s3, _patch_agent, _patch_eval
 ) -> None:
     """The full pipeline should complete a conversation EVEN IF client sends 0 ws audio.
 
@@ -622,7 +634,7 @@ async def test_interruption_does_not_leak_ai_audio(db_with_huawei, mock_s3_uploa
 
 
 async def test_ws_send_failure_on_connection_restart_keeps_session_alive(
-    _huawei_in_mem_db, _patch_s3, _patch_agent
+    _huawei_in_mem_db, _patch_s3, _patch_agent, _patch_eval
 ) -> None:
     """Regression (2026-04-30): previously a failed ws.send_json would re-raise
     and kill the Strands session mid-recovery. Nova Sonic emits

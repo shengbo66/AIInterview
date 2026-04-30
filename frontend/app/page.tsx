@@ -235,7 +235,7 @@ export default function InterviewDemoPage() {
   return (
     <main className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col items-center p-6">
       <div className="max-w-2xl w-full">
-        <h1 className="text-2xl font-semibold mb-1">Interviewer — Walking Skeleton</h1>
+        <h1 className="text-2xl font-semibold mb-1">AI 模拟面试</h1>
         <p className="text-neutral-400 text-sm mb-6">
           华为 · 硬件技术工程师（射频技术方向）实习生
         </p>
@@ -256,6 +256,12 @@ export default function InterviewDemoPage() {
               结束面试
             </button>
           )}
+          <a
+            href="/history"
+            className="px-4 py-2 rounded-md border border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:border-neutral-500 text-sm"
+          >
+            查看历史
+          </a>
           <div className="flex items-center gap-2 text-sm text-neutral-400">
             <span
               className={`inline-block w-2 h-2 rounded-full ${

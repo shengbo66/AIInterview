@@ -37,15 +37,8 @@ class InterviewSummary(BaseModel):
     language: str
     status: str
     created_at: datetime
-
-
-class QuestionOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    order_index: int
-    question_text: str
-    question_audio_s3_key: str | None
+    bidi_started_at: datetime | None = None
+    bidi_ended_at: datetime | None = None
 
 
 class AnswerOut(BaseModel):
@@ -55,6 +48,16 @@ class AnswerOut(BaseModel):
     transcript_text: str
     duration_sec: float
     user_audio_s3_key: str | None
+
+
+class QuestionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    order_index: int
+    question_text: str
+    question_audio_s3_key: str | None
+    answer: AnswerOut | None = None
 
 
 class EvaluationOut(BaseModel):
@@ -85,6 +88,8 @@ class InterviewDetail(BaseModel):
     resume_context: str | None
     bidi_tokens_total: int
     bidi_cost_usd: float
+    bidi_started_at: datetime | None = None
+    bidi_ended_at: datetime | None = None
     created_at: datetime
     questions: list[QuestionOut]
     evaluations: list[EvaluationOut]

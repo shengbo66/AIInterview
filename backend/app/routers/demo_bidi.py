@@ -42,6 +42,7 @@ from strands.experimental.bidi.models import BidiNovaSonicModel
 from app.config import settings
 from app.db import SessionLocal
 from app.services.bidi_interview_session import BidiInterviewSession
+from app.services.evaluation_service import evaluate_interview
 
 logger = logging.getLogger("interviewer.demo_bidi")
 
@@ -245,6 +246,10 @@ async def interview_demo(websocket: WebSocket) -> None:
                 if exc is not None:
                     logger.error("pending task ended with exception: %r", exc)
         await session.finalize_safe(status="completed")
+        # Trigger evaluation in background (fire-and-forget).
+        # If it fails, evaluation_service sets status="evaluation_failed".
+        if session.interview_id:
+            _eval_task = asyncio.create_task(evaluate_interview(SessionLocal, session.interview_id))  # noqa: RUF006
         with contextlib.suppress(Exception):
             await agent.stop()
         with contextlib.suppress(Exception):
