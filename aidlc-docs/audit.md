@@ -402,3 +402,46 @@ Round 2 Verdict: 两个 reviewer 全 PASS。
 **Output**: 同步 aidlc-state.md + audit.md，顶层建 monorepo git，初始 commit
 
 ---
+
+## Sprint 3: 历史列表 + 详情 + 评估报告
+**Timestamp**: 2026-04-30T23:05 ~ 23:47
+**Context**: AIDLC Sprint 3, follow workflow: Workspace Detection → Requirements (delta) → Team Review → Workflow Planning → Construction → Build & Test
+
+### AIDLC Workflow Execution
+- **Workspace Detection**: Brownfield, inception artifacts 齐全, 跳过 reverse engineering
+- **Requirements Analysis (minimal)**: Sprint 3 delta requirements 131 行, S2-3 (history UI) + S2-4 (Claude evaluation)
+- **Team Review**: PM + architect 双 review PASS, 2 MED issues (in_progress 列表处理 + eval background task 生命周期)
+- **Workflow Planning**: S2-3 Code Gen → S2-4 Code Gen → Build & Test, 不分 unit, 跳过 RE/Stories/AppDesign/Units/NFR/Infra
+
+### S2-3 历史列表 + 详情页
+- `/history` 列表页: 按时间倒序, 状态 badge, 时长计算
+- `/history/[id]` 详情页: Q/A timeline, 评估分数, 改进建议, 参考答案
+- 共享导航栏 + 首页"查看历史"入口
+- Backend schema 改动: QuestionOut 加 answer 字段, InterviewSummary 加 bidi_started_at/bidi_ended_at
+- `frontend/lib/api.ts` 共享 fetch 逻辑
+
+### S2-4 评估 Pipeline
+- `evaluation_service.py` 189 行: stage1 (per-Q) + stage2 (overall) Claude 调用
+- 复用 `shared/eval_core/` rubric + prompt_template (POC 已验证)
+- 自动触发: `demo_bidi.py` finalize 后 `asyncio.create_task`
+- 手动重试: `POST /api/interviews/{id}/evaluate`
+- 状态机: completed → evaluating → evaluated | evaluation_failed | evaluation_skipped
+- Sprint 3 scope: voice_score = 0 (音频分析留 Sprint 4)
+
+### 问题与修复
+- `shared` module 在 uvicorn 下找不到: 加 `.pth` 文件到 venv site-packages
+- pytest `pythonpath = [".."]` 解决测试环境的 shared import
+- TestClient 测试需要 `_patch_eval` fixture 避免 fire-and-forget evaluation task 干扰
+
+### 真实验证
+- 12 分钟 13 Q/A 面试 (interview b34b3f9d) 成功触发评估
+- 14 个 Evaluation 记录 (13 per-question + 1 overall), Claude 处理 ~3 分钟
+- status 从 evaluating → evaluated 正确推进
+
+### 测试
+- 57 pytest (原 54 + 3 evaluation tests) + 6 vitest = 63 测试全绿
+- 新增: evaluation pipeline success / empty skip / Claude failure
+
+**User Input**: "先做文档的更新和代码的入库"
+
+---

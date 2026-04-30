@@ -4,8 +4,8 @@
 - **Project Name**: Interviewer (Mock Interview Platform)
 - **Project Type**: Greenfield
 - **Start Date**: 2026-04-25T21:14:51+08:00
-- **Last Session End**: 2026-04-30T23:05:00+08:00
-- **Current Stage**: **Sprint 2 COMPLETE ✅ → Sprint 3 STARTING (history UI + Claude evaluation)**
+- **Last Session End**: 2026-04-30T23:47:00+08:00
+- **Current Stage**: **Sprint 3 COMPLETE ✅ → 待浏览器验证评估展示效果**
 
 ## Workflow Note
 正式 AIDLC unit-by-unit 流程（unit-1..unit-5）在 2026-04-28 与 PM review 之后**转向 Agile Sprint 模式**（walking skeleton → 增量迭代），理由：用户 3 天未接触产品，需要立即建立反馈闭环。原 AIDLC 设计文档（requirements, unit-of-work, unit-2-design）作为"北极星"保留，但执行按 Sprint 推进。
@@ -48,9 +48,22 @@
 - 真实 12 分钟 45 轮浏览器面试顺畅完成（interview b34b3f9d）
 - 自动化测试：24 → **60**（+150%），54 pytest + 6 vitest，全绿
 
-**Sprint 3** — 🔄 STARTING (2026-04-30)
-- S2-3 历史列表 + 详情页
-- S2-4 评估报告（Claude 评分）
+**Sprint 3** — ✅ COMPLETE (2026-04-30)
+- S2-3 历史列表页 `/history` + 详情页 `/history/[id]`（Q/A timeline + 评估展示）
+- S2-4 评估 pipeline：`evaluation_service.py` stage1 (per-Q Claude) + stage2 (overall Claude)
+- 自动触发：finalize 后 fire-and-forget background task
+- 手动重试：`POST /api/interviews/{id}/evaluate`
+- 状态机：completed → evaluating → evaluated | evaluation_failed | evaluation_skipped
+- 真实验证：12 分钟 13 Q/A 面试成功评估（14 evals, ~3 min Claude 处理）
+- 自动化测试：54 pytest + 6 vitest = **60 测试全绿**（+3 evaluation tests）
+- Sprint 3 scope: voice_score = 0（音频分析留 Sprint 4）
+
+**Sprint 4** — NOT STARTED
+- 浏览器验证 Sprint 3 评估展示效果
+- 音频回放（S3 presigned URL）
+- voice_features 分析
+- Prompt 优化（面试节奏）
+- UI polish
 
 ---
 
