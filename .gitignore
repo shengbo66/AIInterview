@@ -1,0 +1,104 @@
+# ============================================================================
+# Interviewer — monorepo gitignore
+# covers: python (backend, poc, shared, nova-sonic-poc) + node (frontend)
+# ============================================================================
+
+# ---- Python ----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+*.egg
+build/
+dist/
+develop-eggs/
+eggs/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# ---- Node / Next.js --------------------------------------------------------
+node_modules/
+.next/
+out/
+.turbo/
+.vercel/
+
+# Debug + test output
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ---- Secrets / env ---------------------------------------------------------
+.env
+.env.local
+.env.*.local
+# allow templates
+!.env.example
+!.env.template
+!template.env
+
+# ---- AWS / secrets sidecars ------------------------------------------------
+*.pem
+*.key
+credentials
+.aws/
+
+# ---- Database (SQLite) -----------------------------------------------------
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# ---- Logs ------------------------------------------------------------------
+*.log
+logs/
+
+# ---- IDE / editor ----------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.iml
+.DS_Store
+._*
+
+# ---- Build artifacts, caches ----------------------------------------------
+*.tsbuildinfo
+next-env.d.ts
+
+# ---- Temp / probe outputs --------------------------------------------------
+/tmp/
+/tmp_*
+probe_output.txt
+smoke_output.txt
+
+# ---- Audio assets we DO want tracked ---------------------------------------
+# backend/assets/hello.pcm is committed (needed at runtime for Sonic bootstrap)
+# but let's exclude any test fixture audio by default
+tests/fixtures/*.pcm
+tests/fixtures/*.wav
+
+# ---- Agent / Kiro local state ---------------------------------------------
+# .kiro/ is user-global, not project-level — ignore if it appears in tree
+.kiro/

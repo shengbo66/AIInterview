@@ -1,0 +1,4 @@
+strands-agents[bidi-all]
+fastapi
+uvicorn[standard]
+python-dotenv
