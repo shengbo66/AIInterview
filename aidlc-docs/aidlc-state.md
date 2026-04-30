@@ -4,8 +4,8 @@
 - **Project Name**: Interviewer (Mock Interview Platform)
 - **Project Type**: Greenfield
 - **Start Date**: 2026-04-25T21:14:51+08:00
-- **Last Session End**: 2026-04-30T23:47:00+08:00
-- **Current Stage**: **Sprint 3 COMPLETE ✅ → 待浏览器验证评估展示效果**
+- **Last Session End**: 2026-05-01T00:26:00+08:00
+- **Current Stage**: **Sprint 3 COMPLETE ✅ + 用户音频留存已实现 → 待浏览器验证音频播放**
 
 ## Workflow Note
 正式 AIDLC unit-by-unit 流程（unit-1..unit-5）在 2026-04-28 与 PM review 之后**转向 Agile Sprint 模式**（walking skeleton → 增量迭代），理由：用户 3 天未接触产品，需要立即建立反馈闭环。原 AIDLC 设计文档（requirements, unit-of-work, unit-2-design）作为"北极星"保留，但执行按 Sprint 推进。
@@ -58,12 +58,14 @@
 - 自动化测试：54 pytest + 6 vitest = **60 测试全绿**（+3 evaluation tests）
 - Sprint 3 scope: voice_score = 0（音频分析留 Sprint 4）
 
-**Sprint 4** — NOT STARTED
-- 浏览器验证 Sprint 3 评估展示效果
-- 音频回放（S3 presigned URL）
-- voice_features 分析
-- Prompt 优化（面试节奏）
-- UI polish
+**Sprint 4** — 🔄 IN PROGRESS (2026-05-01)
+- ✅ 用户音频上传 S3（`_finalize_user_turn` 累积 PCM → assistant turn / finalize 时 upload）
+- ✅ 音频播放 endpoint（`GET /api/interviews/{id}/questions/{qid}/audio?role=user|assistant`）
+- ✅ 详情页播放按钮（Q/A 卡片有 s3_key 时显示 ▶️）
+- ⏳ 浏览器验证音频播放
+- ⏳ voice_features 分析（语速/停顿/填充词 → voice_score）
+- ⏳ Prompt 优化（面试节奏）
+- ⏳ UI polish
 
 ---
 
@@ -127,10 +129,10 @@ interviewer/
 
 ---
 
-## 🧪 测试现状 (58 测试全绿)
+## 🧪 测试现状 (63 测试全绿)
 
 ### Backend `pytest -q` (9s)
-- 原有 42 个 (unit-1 的 24 + bidi session 的 18)
+- 57 pytest（unit-1 原 24 + bidi session 18 + Sprint 2 bug fix 10 + Sprint 3 evaluation 3 + Sprint 2 upsert 2）
 - 新增 10 个（Sprint 2 trouble shooting 结论）：
   - `test_bootstrap_hello_injected_before_ws_audio` — 🔒 锁住 hello.pcm 不被回归
   - `test_bootstrap_triggers_session_without_client_audio` — 端到端零用户输入

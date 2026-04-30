@@ -445,3 +445,28 @@ Round 2 Verdict: 两个 reviewer 全 PASS。
 **User Input**: "先做文档的更新和代码的入库"
 
 ---
+
+## Sprint 4 开始：用户音频留存 + 播放
+**Timestamp**: 2026-05-01T00:02 ~ 00:26
+**Context**: 用户确认评估文字结果 OK，但 voice_score 全是 0（缺音频分析）。先做前置条件：用户音频上传 S3 + 详情页播放。
+
+### 改动
+- `bidi_interview_session.py`: 新增 `_user_audio_chunks` dict 按 question_id 累积用户 PCM。`_finalize_user_turn` 不再丢弃 PCM，而是 append 到 chunks。`_finalize_assistant_turn` 开始时 flush 前一个 Q 的用户音频到 S3。`finalize()` 里 flush 最后一个 Q 的用户音频。
+- `audio.py`: 新 endpoint `GET /api/interviews/{id}/questions/{qid}/audio?role=user|assistant` 返回 presigned URL
+- `history/[id]/page.tsx`: PlayButton 组件，Q/A 卡片有 s3_key 时显示 ▶️
+- `api.ts`: `fetchAudioUrl` helper + AnswerOut/QuestionOut 加 s3_key 字段
+
+### 问题修复
+- `shared` module 在 uvicorn 下找不到：加 `.pth` 文件到 venv site-packages（pytest 用 `pythonpath=[".."]`，uvicorn 需要 .pth）
+- uvicorn worker 卡死（pytest evaluation mock 副作用）：kill + 重启解决
+
+### 测试
+- 57 pytest + 6 vitest = 63 测试全绿，ruff + tsc 干净
+- 5 commits pushed to GitHub
+
+### 下次验证
+- 做一场新面试 → 详情页看 A 行是否有 ▶️ 播放按钮
+- 点播放 → 确认能听到用户回答的录音
+- 之前的面试（b34b3f9d）A 行不会有播放按钮（那时没上传功能）
+
+---
