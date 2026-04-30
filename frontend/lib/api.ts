@@ -14,12 +14,14 @@ export interface AnswerOut {
   id: string;
   transcript_text: string;
   duration_sec: number;
+  user_audio_s3_key: string | null;
 }
 
 export interface QuestionOut {
   id: string;
   order_index: number;
   question_text: string;
+  question_audio_s3_key: string | null;
   answer: AnswerOut | null;
 }
 
@@ -59,4 +61,18 @@ export async function fetchInterview(id: string): Promise<InterviewDetail> {
   const res = await fetch(`${API_BASE}/api/interviews/${id}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch interview ${id}: ${res.status}`);
   return res.json();
+}
+
+export async function fetchAudioUrl(
+  interviewId: string,
+  questionId: string,
+  role: "assistant" | "user"
+): Promise<string> {
+  const res = await fetch(
+    `${API_BASE}/api/interviews/${interviewId}/questions/${questionId}/audio?role=${role}`,
+    { cache: "no-store" }
+  );
+  if (!res.ok) throw new Error(`No audio: ${res.status}`);
+  const data: { url: string } = await res.json();
+  return data.url;
 }

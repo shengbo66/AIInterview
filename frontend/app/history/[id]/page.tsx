@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { fetchInterview, type InterviewDetail, type EvaluationOut } from "@/lib/api";
+import { fetchInterview, fetchAudioUrl, type InterviewDetail, type EvaluationOut } from "@/lib/api";
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleString("zh-CN", {
@@ -28,6 +28,51 @@ function ScoreBadge({ score, label }: { score: number | null; label: string }) {
       <div className={`text-2xl font-bold ${color}`}>{score}</div>
       <div className="text-xs text-neutral-500">{label}</div>
     </div>
+  );
+}
+
+function PlayButton({
+  interviewId,
+  questionId,
+  role,
+}: {
+  interviewId: string;
+  questionId: string;
+  role: "assistant" | "user";
+}) {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const play = async () => {
+    try {
+      const url = await fetchAudioUrl(interviewId, questionId, role);
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => setPlaying(false);
+      audio.onerror = () => setPlaying(false);
+      setPlaying(true);
+      await audio.play();
+    } catch {
+      setPlaying(false);
+    }
+  };
+
+  const stop = () => {
+    audioRef.current?.pause();
+    setPlaying(false);
+  };
+
+  return (
+    <button
+      onClick={playing ? stop : play}
+      className="text-xs text-neutral-500 hover:text-neutral-300 ml-1"
+      title={playing ? "停止" : "播放音频"}
+    >
+      {playing ? "⏹" : "▶️"}
+    </button>
   );
 }
 
@@ -124,6 +169,9 @@ export default function InterviewDetailPage() {
                 <div className="flex items-start gap-3">
                   <span className="text-xs text-sky-400 font-mono min-w-[24px]">Q{i + 1}</span>
                   <p className="text-sm text-neutral-200">{q.question_text}</p>
+                  {q.question_audio_s3_key && (
+                    <PlayButton interviewId={data.id} questionId={q.id} role="assistant" />
+                  )}
                 </div>
                 {q.answer ? (
                   <div className="flex items-start gap-3 ml-1">
@@ -132,6 +180,9 @@ export default function InterviewDetailPage() {
                       <p className="text-sm text-neutral-300">{q.answer.transcript_text}</p>
                       <span className="text-xs text-neutral-600">
                         {q.answer.duration_sec.toFixed(1)}s
+                        {q.answer.user_audio_s3_key && (
+                          <PlayButton interviewId={data.id} questionId={q.id} role="user" />
+                        )}
                       </span>
                     </div>
                   </div>

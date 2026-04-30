@@ -108,6 +108,10 @@ class BidiInterviewSession:
         self._system_prompt: str | None = None
         self._q_count = 0  # assistant turns persisted so far
         self._last_question_id: str | None = None
+        # Per-question user audio accumulator. Key = question_id, value = PCM chunks.
+        # Uploaded to S3 when the next assistant turn starts (= user finished answering)
+        # or during finalize (for the last answer).
+        self._user_audio_chunks: dict[str, list[bytes]] = {}
         # Serialize all DB writes. SQLite can't handle concurrent write
         # transactions well; other backends benefit from this too since
         # our writes are naturally ordered (Q → A → Q → A).
@@ -208,6 +212,9 @@ class BidiInterviewSession:
     async def _finalize_assistant_turn(self, text: str) -> None:
         """Persist Question synchronously (fast), upload AI audio in background.
 
+        Also triggers upload of the *previous* question's user audio (if any),
+        since a new assistant turn means the user finished answering.
+
         DB commit is fast (<10ms in-memory / <50ms SQLite WAL). S3 upload is
         slow (100ms-1s). We commit the Question row first so downstream user
         turn events have a valid FK target immediately, then fire-and-forget
@@ -238,11 +245,14 @@ class BidiInterviewSession:
             question_id, self._interview_id, order, len(text),
         )
 
-        # Fire-and-forget: upload audio + patch s3_key (doesn't block).
+        # Fire-and-forget: upload AI audio + patch s3_key (doesn't block).
         if pcm:
             task = asyncio.create_task(self._upload_and_patch_q(question_id, order, pcm))
             self._background_tasks.add(task)
             task.add_done_callback(self._background_tasks.discard)
+
+        # Upload previous question's user audio (new assistant turn = user finished answering).
+        self._flush_user_audio_for_previous_question()
 
     async def _upload_and_patch_q(self, question_id: str, order: int, pcm: bytes) -> None:
         s3_key = f"{self._s3_prefix}/{self._interview_id}/q{order}.pcm"
@@ -256,6 +266,35 @@ class BidiInterviewSession:
             if q is not None:
                 q.question_audio_s3_key = s3_key
                 await db.commit()
+
+    def _flush_user_audio_for_previous_question(self) -> None:
+        """Upload accumulated user audio for all questions that have chunks."""
+        for qid, chunks in list(self._user_audio_chunks.items()):
+            pcm = b"".join(chunks)
+            if not pcm:
+                continue
+            del self._user_audio_chunks[qid]
+            task = asyncio.create_task(self._upload_user_audio(qid, pcm))
+            self._background_tasks.add(task)
+            task.add_done_callback(self._background_tasks.discard)
+
+    async def _upload_user_audio(self, question_id: str, pcm: bytes) -> None:
+        s3_key = f"{self._s3_prefix}/{self._interview_id}/a_{question_id}.pcm"
+        try:
+            await s3_audio.upload(s3_key, pcm, content_type="audio/pcm")
+        except Exception:
+            logger.exception("user audio upload failed key=%s", s3_key)
+            return
+        async with self._db_lock, self._sf() as db:
+            a = (
+                await db.execute(
+                    select(Answer).where(Answer.question_id == question_id)
+                )
+            ).scalar_one_or_none()
+            if a is not None:
+                a.user_audio_s3_key = s3_key
+                await db.commit()
+        logger.info("uploaded user audio key=%s", s3_key)
         logger.debug("patched Q audio key=%s", s3_key)
 
     async def _finalize_user_turn(self, text: str) -> None:
@@ -279,7 +318,10 @@ class BidiInterviewSession:
             self._user_buf.flush()
             return
         question_id = self._last_question_id
-        _pcm, duration = self._user_buf.flush()
+        pcm_chunk, duration = self._user_buf.flush()
+        # Accumulate user audio for later S3 upload
+        if pcm_chunk:
+            self._user_audio_chunks.setdefault(question_id, []).append(pcm_chunk)
         async with self._db_lock, self._sf() as db:
             existing = (
                 await db.execute(
@@ -318,6 +360,8 @@ class BidiInterviewSession:
         if self._finalized or self._interview_id is None:
             return
         self._finalized = True
+        # Upload any remaining user audio (last answer before session ends).
+        self._flush_user_audio_for_previous_question()
         # Drain background S3 uploads so the Interview row reflects final state.
         if self._background_tasks:
             logger.info("draining %d background tasks before finalize", len(self._background_tasks))
