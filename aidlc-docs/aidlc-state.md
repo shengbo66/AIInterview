@@ -4,8 +4,8 @@
 - **Project Name**: Interviewer (Mock Interview Platform)
 - **Project Type**: Greenfield
 - **Start Date**: 2026-04-25T21:14:51+08:00
-- **Last Session End**: 2026-05-01T00:26:00+08:00
-- **Current Stage**: **Sprint 3 COMPLETE ✅ + 用户音频留存已实现 → 待浏览器验证音频播放**
+- **Last Session End**: 2026-05-01T12:22:00+08:00
+- **Current Stage**: **Cloud deployment PAUSED (Tokyo EC2 + CloudFront) — IAM 权限已加，待装 Python/Node/部署代码**
 
 ## Workflow Note
 正式 AIDLC unit-by-unit 流程（unit-1..unit-5）在 2026-04-28 与 PM review 之后**转向 Agile Sprint 模式**（walking skeleton → 增量迭代），理由：用户 3 天未接触产品，需要立即建立反馈闭环。原 AIDLC 设计文档（requirements, unit-of-work, unit-2-design）作为"北极星"保留，但执行按 Sprint 推进。
