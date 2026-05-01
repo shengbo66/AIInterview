@@ -11,6 +11,8 @@ from app.services import record_service
 
 router = APIRouter(prefix="/api/interviews", tags=["interviews"])
 
+_bg_tasks: set[asyncio.Task] = set()
+
 
 @router.post("", response_model=InterviewDetail, status_code=201)
 async def create_interview(
@@ -67,5 +69,7 @@ async def trigger_evaluation(
         raise errors.bad_request(f"Cannot evaluate interview in status '{iv.status}'")
     iv.status = "evaluating"
     await db.commit()
-    asyncio.create_task(evaluate_interview(SessionLocal, interview_id))  # noqa: RUF006
+    task = asyncio.create_task(evaluate_interview(SessionLocal, interview_id))
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
     return {"status": "evaluation_started", "interview_id": interview_id}

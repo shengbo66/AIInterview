@@ -41,27 +41,38 @@ function PlayButton({
   role: "assistant" | "user";
 }) {
   const [playing, setPlaying] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null);
 
   const play = async () => {
     try {
       const url = await fetchAudioUrl(interviewId, questionId, role);
-      if (audioRef.current) {
-        audioRef.current.pause();
+      // Fetch raw PCM16 16kHz mono bytes
+      const resp = await fetch(url);
+      const arrayBuf = await resp.arrayBuffer();
+      const pcmData = new Int16Array(arrayBuf);
+
+      // Convert Int16 PCM to Float32 for Web Audio
+      const ctx = new AudioContext({ sampleRate: 16000 });
+      const audioBuffer = ctx.createBuffer(1, pcmData.length, 16000);
+      const channel = audioBuffer.getChannelData(0);
+      for (let i = 0; i < pcmData.length; i++) {
+        channel[i] = pcmData[i] / 32768;
       }
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => setPlaying(false);
-      audio.onerror = () => setPlaying(false);
+
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      sourceRef.current = source;
+      source.onended = () => setPlaying(false);
       setPlaying(true);
-      await audio.play();
+      source.start();
     } catch {
       setPlaying(false);
     }
   };
 
   const stop = () => {
-    audioRef.current?.pause();
+    try { sourceRef.current?.stop(); } catch { /* already stopped */ }
     setPlaying(false);
   };
 

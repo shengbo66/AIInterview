@@ -70,6 +70,10 @@ def _load_hello_pcm() -> bytes | None:
 
 _HELLO_PCM = _load_hello_pcm()
 _HELLO_CHUNK_MS = 100  # stream it as 100ms chunks, same shape as browser
+
+# Background evaluation tasks — must be held at module level to prevent GC
+# from cancelling fire-and-forget asyncio tasks.
+_eval_tasks: set[asyncio.Task] = set()
 _HELLO_CHUNK_BYTES = 16000 * _HELLO_CHUNK_MS // 1000 * 2  # 3200 bytes per chunk
 
 
@@ -249,7 +253,9 @@ async def interview_demo(websocket: WebSocket) -> None:
         # Trigger evaluation in background (fire-and-forget).
         # If it fails, evaluation_service sets status="evaluation_failed".
         if session.interview_id:
-            _eval_task = asyncio.create_task(evaluate_interview(SessionLocal, session.interview_id))  # noqa: RUF006
+            task = asyncio.create_task(evaluate_interview(SessionLocal, session.interview_id))
+            _eval_tasks.add(task)
+            task.add_done_callback(_eval_tasks.discard)
         with contextlib.suppress(Exception):
             await agent.stop()
         with contextlib.suppress(Exception):
