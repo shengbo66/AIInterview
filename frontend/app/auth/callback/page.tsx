@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { exchangeCodeForTokens } from "@/lib/auth";
 
-export default function AuthCallbackPage() {
+function CallbackInner() {
   const router = useRouter();
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(null);
@@ -30,4 +30,12 @@ export default function AuthCallbackPage() {
     );
   }
   return <div className="p-8 text-neutral-400">登录中...</div>;
+}
+
+export default function AuthCallbackPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-neutral-400">加载中...</div>}>
+      <CallbackInner />
+    </Suspense>
+  );
 }
