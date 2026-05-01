@@ -1,0 +1,17 @@
+[Unit]
+Description=Interviewer Frontend (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/interviewer/frontend
+Environment="NODE_ENV=production" "PATH=/usr/bin:/usr/local/bin"
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

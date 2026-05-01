@@ -1,0 +1,17 @@
+# Listen on :80 (CloudFront terminates HTTPS and forwards here as HTTP)
+:80 {
+    # WebSocket + API → backend on :8000
+    @backend {
+        path /ws/* /api/*
+    }
+    reverse_proxy @backend localhost:8000 {
+        # Long timeouts for WebSocket (10-min interview sessions)
+        transport http {
+            read_timeout 15m
+            write_timeout 15m
+        }
+    }
+
+    # Everything else → Next.js on :3000
+    reverse_proxy localhost:3000
+}
