@@ -14,5 +14,10 @@ class Settings(BaseSettings):
     # Dev-only: comma-separated origins for CORS
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
+    # Cognito (empty = auth disabled, for local dev)
+    cognito_region: str = "us-east-1"
+    cognito_user_pool_id: str = ""
+    cognito_client_id: str = ""
+
 
 settings = Settings()

@@ -115,6 +115,17 @@ def _build_agent(system_prompt: str) -> BidiAgent:
 @router.websocket("/ws/interview-demo")
 async def interview_demo(websocket: WebSocket) -> None:
     """Hardcoded Huawei RF Intern interview, persisted via BidiInterviewSession."""
+    # Verify JWT from query param BEFORE accepting (browsers can't set
+    # Authorization header on WebSocket).
+    try:
+        token = websocket.query_params.get("token")
+        from app.auth import verify_ws_token
+        verify_ws_token(token)
+    except Exception as e:
+        logger.warning("WS auth failed: %s", e)
+        await websocket.close(code=4401, reason="unauthorized")
+        return
+
     await websocket.accept()
     logger.info("WS demo connected at %s", datetime.now().isoformat())
 

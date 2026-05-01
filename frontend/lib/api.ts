@@ -2,6 +2,8 @@
 // Otherwise use explicit API_BASE (e.g. http://localhost:8000 for local dev).
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+import { authHeaders } from "./auth";
+
 export interface InterviewSummary {
   id: string;
   company_name: string;
@@ -54,13 +56,19 @@ export interface InterviewDetail {
 }
 
 export async function fetchInterviews(): Promise<InterviewSummary[]> {
-  const res = await fetch(`${API_BASE}/api/interviews`, { cache: "no-store" });
+  const res = await fetch(`${API_BASE}/api/interviews`, {
+    cache: "no-store",
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error(`Failed to fetch interviews: ${res.status}`);
   return res.json();
 }
 
 export async function fetchInterview(id: string): Promise<InterviewDetail> {
-  const res = await fetch(`${API_BASE}/api/interviews/${id}`, { cache: "no-store" });
+  const res = await fetch(`${API_BASE}/api/interviews/${id}`, {
+    cache: "no-store",
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error(`Failed to fetch interview ${id}: ${res.status}`);
   return res.json();
 }
@@ -72,7 +80,7 @@ export async function fetchAudioUrl(
 ): Promise<string> {
   const res = await fetch(
     `${API_BASE}/api/interviews/${interviewId}/questions/${questionId}/audio?role=${role}`,
-    { cache: "no-store" }
+    { cache: "no-store", headers: authHeaders() }
   );
   if (!res.ok) throw new Error(`No audio: ${res.status}`);
   const data: { url: string } = await res.json();

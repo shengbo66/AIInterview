@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { base64FromInt16, int16FromBase64 } from "@/lib/audio-codec";
+import { getAccessToken } from "@/lib/auth";
 
 type TranscriptLine = {
   role: "user" | "assistant";
@@ -15,16 +16,26 @@ const WS_URL_CONFIG =
   process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/interview-demo";
 
 function resolveWsUrl(): string {
+  let base: string;
   // If config already has ws:// or wss://, use as-is.
   if (WS_URL_CONFIG.startsWith("ws://") || WS_URL_CONFIG.startsWith("wss://")) {
-    return WS_URL_CONFIG;
+    base = WS_URL_CONFIG;
+  } else if (typeof window === "undefined") {
+    base = WS_URL_CONFIG;
+  } else {
+    // Otherwise treat it as a path and compose with current page origin.
+    // This lets us deploy behind CloudFront (HTTPS → wss://) without hardcoding the domain.
+    const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const path = WS_URL_CONFIG.startsWith("/") ? WS_URL_CONFIG : `/${WS_URL_CONFIG}`;
+    base = `${scheme}//${window.location.host}${path}`;
   }
-  // Otherwise treat it as a path and compose with current page origin.
-  // This lets us deploy behind CloudFront (HTTPS → wss://) without hardcoding the domain.
-  if (typeof window === "undefined") return WS_URL_CONFIG;
-  const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const path = WS_URL_CONFIG.startsWith("/") ? WS_URL_CONFIG : `/${WS_URL_CONFIG}`;
-  return `${scheme}//${window.location.host}${path}`;
+  // Append Cognito access token (browsers can't set Authorization header on WebSocket)
+  const token = getAccessToken();
+  if (token) {
+    const sep = base.includes("?") ? "&" : "?";
+    return `${base}${sep}token=${encodeURIComponent(token)}`;
+  }
+  return base;
 }
 
 function fmtTs(ms: number): string {

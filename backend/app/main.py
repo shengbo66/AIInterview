@@ -1,9 +1,10 @@
 """FastAPI app entrypoint."""
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.auth import verify_token
 from app.config import settings
 from app.db import SessionLocal
 from app.logging_config import setup_logging
@@ -30,8 +31,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Auth requirement:
+#   - /api/health: no auth (public for healthchecks)
+#   - /api/* (other): JWT Bearer required
+#   - /ws/* : JWT via ?token=... query param (handled in demo_bidi)
+AUTH = [Depends(verify_token)]
+
 app.include_router(health.router)
-app.include_router(company_styles.router)
-app.include_router(interviews.router)
-app.include_router(audio.router)
+app.include_router(company_styles.router, dependencies=AUTH)
+app.include_router(interviews.router, dependencies=AUTH)
+app.include_router(audio.router, dependencies=AUTH)
 app.include_router(demo_bidi.router)
