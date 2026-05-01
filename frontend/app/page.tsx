@@ -11,8 +11,21 @@ type TranscriptLine = {
   ts: number; // epoch ms, set at first observation of this line
 };
 
-const WS_URL =
+const WS_URL_CONFIG =
   process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000/ws/interview-demo";
+
+function resolveWsUrl(): string {
+  // If config already has ws:// or wss://, use as-is.
+  if (WS_URL_CONFIG.startsWith("ws://") || WS_URL_CONFIG.startsWith("wss://")) {
+    return WS_URL_CONFIG;
+  }
+  // Otherwise treat it as a path and compose with current page origin.
+  // This lets us deploy behind CloudFront (HTTPS → wss://) without hardcoding the domain.
+  if (typeof window === "undefined") return WS_URL_CONFIG;
+  const scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const path = WS_URL_CONFIG.startsWith("/") ? WS_URL_CONFIG : `/${WS_URL_CONFIG}`;
+  return `${scheme}//${window.location.host}${path}`;
+}
 
 function fmtTs(ms: number): string {
   const d = new Date(ms);
@@ -143,7 +156,7 @@ export default function InterviewDemoPage() {
 
       // 3) WebSocket — connect BEFORE wiring the worklet, so we don't lose
       //    the first few PCM chunks while WS handshake is in flight.
-      const ws = new WebSocket(WS_URL);
+      const ws = new WebSocket(resolveWsUrl());
       wsRef.current = ws;
 
       // Mic-frame counter for diagnostics: lets us confirm in the browser

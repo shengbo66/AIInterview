@@ -1,3 +1,5 @@
+// Empty string means "same origin" (for CloudFront deployment).
+// Otherwise use explicit API_BASE (e.g. http://localhost:8000 for local dev).
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export interface InterviewSummary {
