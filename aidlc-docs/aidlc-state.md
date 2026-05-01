@@ -4,8 +4,8 @@
 - **Project Name**: Interviewer (Mock Interview Platform)
 - **Project Type**: Greenfield
 - **Start Date**: 2026-04-25T21:14:51+08:00
-- **Last Session End**: 2026-05-01T12:22:00+08:00
-- **Current Stage**: **Cloud deployment PAUSED (Tokyo EC2 + CloudFront) — IAM 权限已加，待装 Python/Node/部署代码**
+- **Last Session End**: 2026-05-02T00:02:00+08:00
+- **Current Stage**: **云上部署完成 ✅ + Cognito auth ✅ — 可对外 demo (https://d1hlahtkv3v1q6.cloudfront.net)**
 
 ## Workflow Note
 正式 AIDLC unit-by-unit 流程（unit-1..unit-5）在 2026-04-28 与 PM review 之后**转向 Agile Sprint 模式**（walking skeleton → 增量迭代），理由：用户 3 天未接触产品，需要立即建立反馈闭环。原 AIDLC 设计文档（requirements, unit-of-work, unit-2-design）作为"北极星"保留，但执行按 Sprint 推进。
@@ -66,6 +66,23 @@
 - ⏳ voice_features 分析（语速/停顿/填充词 → voice_score）
 - ⏳ Prompt 优化（面试节奏）
 - ⏳ UI polish
+
+**Sprint 5 云上部署 + Cognito** — ✅ COMPLETE (2026-05-01)
+- EC2 Tokyo + Caddy (:80) + systemd services
+- CloudFront distribution: `d1hlahtkv3v1q6.cloudfront.net` (E1C2SHDKQ3AT2Q)
+- Cognito User Pool: `us-east-1_Yy5si2wyX`, Client: `54ljqt6asmevn1qchrbb0in8r1`
+- Hosted UI: `interviewer-mvp-484626021127.auth.us-east-1.amazoncognito.com`
+- Demo user: `demo@interviewer.test` / `Interview2026!`
+- Backend: JWT verification via `python-jose` + JWKS cache，`/api/health` 公开，其他所有 routes + WS 强制认证
+- Frontend: AuthGuard + Hosted UI redirect + `Authorization: Bearer` header + WS `?token=`
+- **Epoxy 合规**：EC2 :80 只允许 CloudFront prefix list `pl-58a04531` (origin-facing IPs)，公网直连 timeout
+- **经验教训**：暴露 :80 给 0.0.0.0/0 会被 Amazon Epoxy 自动隔离（DyePack.EC2IPAuthentication）
+- 63 自动化测试全绿
+
+**Sprint 6** — ⏳ 明天继续
+- 调声音功能（user 音频 playback bug 排查）
+- voice_features 分析
+- 暴露到公司内部 demo 给用户测
 
 ---
 
