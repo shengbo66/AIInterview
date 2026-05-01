@@ -22,7 +22,7 @@ class InterviewCreate(BaseModel):
     role_title: str = Field(min_length=1, max_length=200)
     company_style_id: str | None = None
     language: str = Field(default="zh", pattern=r"^(zh|en)$")
-    duration_min: int = Field(default=45, ge=5, le=180)
+    duration_min: int = Field(default=10, ge=5, le=180)
     question_count_target: int = Field(default=8, ge=1, le=30)
     mode: str = Field(default="strict", pattern=r"^(strict|friendly)$")
     resume_context: str | None = None
