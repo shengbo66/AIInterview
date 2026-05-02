@@ -62,6 +62,13 @@ def _features(**overrides) -> dict:
         "hesitation_count": 1,
         "volume_mean": 0.3,
         "volume_stability": 0.2,
+        # Sprint 8 defaults (ideal: high confidence, positive sentiment)
+        "accurate_wpm": 200,
+        "accurate_speaking_sec": 25.0,
+        "low_confidence_ratio": 0.05,
+        "low_confidence_words": [],
+        "sentiment_overall": "POSITIVE",
+        "sentiment_scores": {"positive": 0.8, "negative": 0.05, "neutral": 0.1, "mixed": 0.05},
     }
     base.update(overrides)
     return base
@@ -242,6 +249,61 @@ class TestSprint7DeductionsStack:
 
     def test_missing_sprint7_keys_treated_as_zero(self):
         # Legacy data without Sprint 7 fields → no deductions from them
+        legacy = {
+            "duration_total_sec": 30.0,
+            "duration_speaking_sec": 28.0,
+            "speaking_ratio": 0.93,
+            "talk_speed_cps": 4.0,
+            "pause_count_per_minute": 4.0,
+            "filler_word_ratio": 0.02,
+        }
+        assert voice_score_from_features(legacy) == 100
+
+
+# ---------------- Sprint 8 Transcribe/Comprehend deductions ----------------
+
+
+class TestLowConfidenceDeduction:
+    def test_high_confidence_no_deduction(self):
+        assert voice_score_from_features(_features(low_confidence_ratio=0.1)) == 100
+
+    def test_low_confidence_deducted(self):
+        assert voice_score_from_features(_features(low_confidence_ratio=0.25)) == 90
+
+    def test_boundary_0_2(self):
+        assert voice_score_from_features(_features(low_confidence_ratio=0.2)) == 100
+        assert voice_score_from_features(_features(low_confidence_ratio=0.21)) == 90
+
+
+class TestSentimentDeduction:
+    def test_positive_sentiment_no_deduction(self):
+        assert voice_score_from_features(_features(sentiment_overall="POSITIVE")) == 100
+
+    def test_neutral_no_deduction(self):
+        assert voice_score_from_features(_features(sentiment_overall="NEUTRAL")) == 100
+
+    def test_negative_deducted(self):
+        assert voice_score_from_features(_features(sentiment_overall="NEGATIVE")) == 95
+
+    def test_mixed_no_deduction(self):
+        assert voice_score_from_features(_features(sentiment_overall="MIXED")) == 100
+
+    def test_unknown_no_deduction(self):
+        assert voice_score_from_features(_features(sentiment_overall="UNKNOWN")) == 100
+
+
+class TestSprint8StackingWithLegacy:
+    def test_all_dimensions_deduct(self):
+        # Slow speed -15 + low conf -10 + negative sentiment -5 = 70
+        f = _features(
+            talk_speed_cps=2.0,
+            low_confidence_ratio=0.3,
+            sentiment_overall="NEGATIVE",
+        )
+        assert voice_score_from_features(f) == 70
+
+    def test_missing_sprint8_keys_backward_compat(self):
+        """Legacy data without Sprint 8 fields should not be affected."""
         legacy = {
             "duration_total_sec": 30.0,
             "duration_speaking_sec": 28.0,

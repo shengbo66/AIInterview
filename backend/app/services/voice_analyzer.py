@@ -70,6 +70,13 @@ class VoiceFeatures:
     hesitation_count: int = 0
     volume_mean: float = 0.0
     volume_stability: float = 0.0
+    # Sprint 8 additions (Transcribe + Comprehend)
+    accurate_wpm: float = 0.0  # Based on Transcribe word timestamps
+    accurate_speaking_sec: float = 0.0  # sum of word durations
+    low_confidence_ratio: float = 0.0  # frac of words with conf < 0.6
+    low_confidence_words: list[str] = field(default_factory=list)  # distinct list
+    sentiment_overall: str = "UNKNOWN"  # POSITIVE/NEGATIVE/NEUTRAL/MIXED/UNKNOWN
+    sentiment_scores: dict = field(default_factory=lambda: {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0})
     # Kept for backward compat with stage1 prompt template
     transcribe_sentiment: dict = field(default_factory=lambda: {"overall": "NEUTRAL"})
 
@@ -300,15 +307,60 @@ def _detect_fillers(transcript: str) -> tuple[int, list[str]]:
     return total, detected
 
 
+def _analyze_words(
+    words: list,
+    duration_total: float,
+    low_confidence_threshold: float = 0.6,
+) -> tuple[float, float, float, list[str]]:
+    """Analyze Transcribe word-level output.
+
+    Accepts list of Word-like objects (duck typing on .text/.start_ms/.end_ms/.confidence).
+    Returns (accurate_wpm, accurate_speaking_sec, low_conf_ratio, low_conf_words).
+
+    - accurate_wpm: character count × (60000 / speaking_ms). For Chinese, 1 char ≈ 1 word
+      (Transcribe returns each Chinese character as a separate "word").
+    - accurate_speaking_sec: sum of (end - start) across all words
+    - low_conf_ratio: count(conf < threshold) / total
+    - low_conf_words: distinct list of low-confidence word texts
+    """
+    if not words:
+        return 0.0, 0.0, 0.0, []
+
+    total_ms = 0
+    low_confs: list[str] = []
+    low_conf_set: set[str] = set()
+    word_count = len(words)
+
+    for w in words:
+        dur_ms = max(0, w.end_ms - w.start_ms)
+        total_ms += dur_ms
+        if w.confidence < low_confidence_threshold and w.text not in low_conf_set:
+            low_confs.append(w.text)
+            low_conf_set.add(w.text)
+
+    speaking_sec = total_ms / 1000.0
+    wpm = (word_count / (speaking_sec / 60.0)) if speaking_sec > 0 else 0.0
+    low_count = sum(1 for w in words if w.confidence < low_confidence_threshold)
+    low_ratio = low_count / word_count if word_count > 0 else 0.0
+
+    return wpm, speaking_sec, low_ratio, low_confs
+
+
 def analyze(
     pcm_bytes: bytes,
     sample_rate: int,
     transcript: str,
+    words: list | None = None,
+    sentiment: dict | None = None,
 ) -> VoiceFeatures:
     """Analyze one answer's audio + transcript. Returns VoiceFeatures.
 
     Raises ValueError if pcm_bytes is shorter than 1 second (caller should
     fall back to dummy per FR-4).
+
+    Sprint 8 optional args:
+    - words: list of Word objects from Transcribe (None = skip accurate metrics)
+    - sentiment: dict from comprehend_client (None = UNKNOWN)
     """
     samples = _pcm16_to_ints(pcm_bytes)
     if len(samples) < _MIN_SAMPLES_FOR_ANALYSIS:
@@ -348,6 +400,19 @@ def analyze(
     hesitation_count = _count_hesitations(samples, sample_rate)
     volume_mean, volume_stability = _compute_volume_stats(samples, sample_rate)
 
+    # Sprint 8: accurate metrics from Transcribe words
+    accurate_wpm, accurate_speaking_sec, low_conf_ratio, low_conf_words = (
+        _analyze_words(words, duration_total) if words else (0.0, 0.0, 0.0, [])
+    )
+
+    # Sprint 8: sentiment from Comprehend
+    if sentiment:
+        sentiment_overall = sentiment.get("overall", "UNKNOWN")
+        sentiment_scores = sentiment.get("scores", {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0})
+    else:
+        sentiment_overall = "UNKNOWN"
+        sentiment_scores = {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}
+
     # Chinese char count (excludes filler-word chars in filler_word_ratio denom?
     # We keep total char count as denom for an honest ratio.)
     char_count = _count_chinese_chars(transcript)
@@ -377,4 +442,10 @@ def analyze(
         hesitation_count=hesitation_count,
         volume_mean=round(volume_mean, 3),
         volume_stability=round(volume_stability, 3),
+        accurate_wpm=round(accurate_wpm, 1),
+        accurate_speaking_sec=round(accurate_speaking_sec, 2),
+        low_confidence_ratio=round(low_conf_ratio, 3),
+        low_confidence_words=low_conf_words,
+        sentiment_overall=sentiment_overall,
+        sentiment_scores=sentiment_scores,
     )

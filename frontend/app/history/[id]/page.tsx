@@ -268,6 +268,34 @@ export default function InterviewDetailPage() {
                             <div className="text-neutral-600">🎚 {parts.join(" · ")}</div>
                           ) : null;
                         })()}
+                        {/* Sprint 8: Transcribe/Comprehend metrics */}
+                        {(() => {
+                          const vf = ev.voice_features!;
+                          const hasTranscribe = (vf.accurate_wpm ?? 0) > 0;
+                          const hasSentiment = vf.sentiment_overall && vf.sentiment_overall !== "UNKNOWN";
+                          if (!hasTranscribe && !hasSentiment) return null;
+                          const parts: string[] = [];
+                          if (hasTranscribe) {
+                            parts.push(`精确 ${Math.round(vf.accurate_wpm!)} 字/分`);
+                            const clarity = Math.round((1 - (vf.low_confidence_ratio ?? 0)) * 100);
+                            parts.push(`清晰度 ${clarity}%`);
+                            if ((vf.low_confidence_words?.length ?? 0) > 0) {
+                              parts.push(`疑似不清: ${vf.low_confidence_words!.slice(0, 3).join(" ")}`);
+                            }
+                          }
+                          if (hasSentiment) {
+                            const zh = {
+                              POSITIVE: "积极",
+                              NEGATIVE: "消极",
+                              NEUTRAL: "中立",
+                              MIXED: "复杂",
+                            }[vf.sentiment_overall!] || vf.sentiment_overall;
+                            parts.push(`情感 ${zh}`);
+                          }
+                          return (
+                            <div className="text-neutral-600">📊 {parts.join(" · ")}</div>
+                          );
+                        })()}
                       </div>
                     ) : null}
                     {ev.improvement_suggestion && (

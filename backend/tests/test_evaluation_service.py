@@ -154,7 +154,7 @@ async def test_compute_voice_no_s3_key_returns_dummy():
         transcript_text="测试",
         duration_sec=3.5,
     )
-    result = await _compute_voice_features(answer)
+    result = await _compute_voice_features(answer, "test-iv-id")
     assert result["duration_total_sec"] == 3.5  # passthrough from answer
     assert result["talk_speed_cps"] == 0
     assert result["filler_word_count"] == 0
@@ -177,7 +177,7 @@ async def test_compute_voice_s3_error_returns_dummy():
     )
     with patch("app.services.evaluation_service.s3_audio") as mock_s3:
         mock_s3.download_bytes = AsyncMock(side_effect=Exception("NoSuchKey"))
-        result = await _compute_voice_features(answer)
+        result = await _compute_voice_features(answer, "test-iv-id")
     assert result["duration_total_sec"] == 5.0
     assert result["talk_speed_cps"] == 0
 
@@ -196,9 +196,17 @@ async def test_compute_voice_short_pcm_returns_dummy():
         duration_sec=0.5,
     )
     short_pcm = b"\x00\x00" * 100  # 100 samples = way below 1s threshold
-    with patch("app.services.evaluation_service.s3_audio") as mock_s3:
+    with patch("app.services.evaluation_service.s3_audio") as mock_s3, \
+         patch("app.services.evaluation_service.transcribe_client") as mock_tr, \
+         patch("app.services.evaluation_service.comprehend_client") as mock_cp:
         mock_s3.download_bytes = AsyncMock(return_value=short_pcm)
-        result = await _compute_voice_features(answer)
+        mock_tr.submit_job = AsyncMock(return_value="job")
+        mock_tr.wait_for_completion = AsyncMock(return_value={"status": "COMPLETED"})
+        mock_tr.parse_words = AsyncMock(return_value=[])
+        mock_cp.detect_sentiment = AsyncMock(
+            return_value={"overall": "UNKNOWN", "scores": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}}
+        )
+        result = await _compute_voice_features(answer, "test-iv-id")
     assert result["duration_total_sec"] == 0.5
     assert result["talk_speed_cps"] == 0
 
@@ -225,9 +233,17 @@ async def test_compute_voice_success_returns_real_features():
         transcript_text="我对射频方向很感兴趣",  # 9 Chinese chars
         duration_sec=2.0,
     )
-    with patch("app.services.evaluation_service.s3_audio") as mock_s3:
+    with patch("app.services.evaluation_service.s3_audio") as mock_s3, \
+         patch("app.services.evaluation_service.transcribe_client") as mock_tr, \
+         patch("app.services.evaluation_service.comprehend_client") as mock_cp:
         mock_s3.download_bytes = AsyncMock(return_value=pcm)
-        result = await _compute_voice_features(answer)
+        mock_tr.submit_job = AsyncMock(return_value="job")
+        mock_tr.wait_for_completion = AsyncMock(return_value={"status": "COMPLETED"})
+        mock_tr.parse_words = AsyncMock(return_value=[])
+        mock_cp.detect_sentiment = AsyncMock(
+            return_value={"overall": "NEUTRAL", "scores": {"positive": 0.1, "negative": 0.1, "neutral": 0.7, "mixed": 0.1}}
+        )
+        result = await _compute_voice_features(answer, "test-iv-id")
 
     assert result["duration_total_sec"] == pytest.approx(2.0, abs=0.1)
     assert result["talk_speed_cps"] > 0  # 9 chars / ~2s = ~4.5

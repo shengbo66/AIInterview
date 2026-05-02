@@ -6,6 +6,7 @@ import struct
 
 import pytest
 
+from app.clients.transcribe_client import Word
 from app.services.voice_analyzer import (
     VoiceFeatures,
     _count_chinese_chars,
@@ -309,6 +310,12 @@ class TestVoiceFeaturesDataclass:
             "hesitation_count",
             "volume_mean",
             "volume_stability",
+            "accurate_wpm",
+            "accurate_speaking_sec",
+            "low_confidence_ratio",
+            "low_confidence_words",
+            "sentiment_overall",
+            "sentiment_scores",
             "transcribe_sentiment",
         }
         assert set(d.keys()) == expected_keys
@@ -394,3 +401,78 @@ class TestVolumeStats:
         features = analyze(pcm, SR, "你好")
         assert features.volume_mean >= 0
         assert features.volume_mean < 0.01  # very quiet
+
+
+# ---------- Sprint 8 Transcribe + Comprehend integration ----------
+
+
+class TestAnalyzeWithWords:
+    """Test analyze() with optional words list (from Transcribe)."""
+
+    def test_without_words_fields_zeroed(self):
+        pcm = _gen_speech_like(2.0)
+        features = analyze(pcm, SR, "我对射频感兴趣")
+        assert features.accurate_wpm == 0
+        assert features.accurate_speaking_sec == 0
+        assert features.low_confidence_ratio == 0
+        assert features.low_confidence_words == []
+
+    def test_with_high_confidence_words(self):
+        pcm = _gen_speech_like(2.0)
+        words = [
+            Word(text="我", start_ms=0, end_ms=500, confidence=0.98),
+            Word(text="对", start_ms=500, end_ms=1000, confidence=0.95),
+            Word(text="射", start_ms=1000, end_ms=1500, confidence=0.99),
+            Word(text="频", start_ms=1500, end_ms=2000, confidence=0.97),
+        ]
+        features = analyze(pcm, SR, "我对射频", words=words)
+        assert features.accurate_wpm > 0  # 4 words / (2000ms/60000) = 120 wpm
+        assert features.accurate_speaking_sec == pytest.approx(2.0, abs=0.1)
+        assert features.low_confidence_ratio == 0
+        assert features.low_confidence_words == []
+
+    def test_with_mixed_confidence_words(self):
+        pcm = _gen_speech_like(2.0)
+        words = [
+            Word(text="我", start_ms=0, end_ms=500, confidence=0.98),
+            Word(text="对", start_ms=500, end_ms=1000, confidence=0.45),  # low
+            Word(text="射", start_ms=1000, end_ms=1500, confidence=0.50),  # low
+            Word(text="频", start_ms=1500, end_ms=2000, confidence=0.97),
+        ]
+        features = analyze(pcm, SR, "我对射频", words=words)
+        # 2/4 = 0.5 low confidence
+        assert features.low_confidence_ratio == pytest.approx(0.5)
+        assert set(features.low_confidence_words) == {"对", "射"}
+
+    def test_empty_words_list(self):
+        pcm = _gen_speech_like(2.0)
+        features = analyze(pcm, SR, "测试", words=[])
+        assert features.accurate_wpm == 0
+        assert features.low_confidence_ratio == 0
+
+
+class TestAnalyzeWithSentiment:
+    def test_without_sentiment_unknown(self):
+        pcm = _gen_speech_like(2.0)
+        features = analyze(pcm, SR, "测试")
+        assert features.sentiment_overall == "UNKNOWN"
+        assert features.sentiment_scores == {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0}
+
+    def test_with_positive_sentiment(self):
+        pcm = _gen_speech_like(2.0)
+        sentiment = {
+            "overall": "POSITIVE",
+            "scores": {"positive": 0.9, "negative": 0.01, "neutral": 0.05, "mixed": 0.04},
+        }
+        features = analyze(pcm, SR, "我非常喜欢这个", sentiment=sentiment)
+        assert features.sentiment_overall == "POSITIVE"
+        assert features.sentiment_scores["positive"] == pytest.approx(0.9)
+
+    def test_with_negative_sentiment(self):
+        pcm = _gen_speech_like(2.0)
+        sentiment = {
+            "overall": "NEGATIVE",
+            "scores": {"positive": 0.05, "negative": 0.85, "neutral": 0.05, "mixed": 0.05},
+        }
+        features = analyze(pcm, SR, "这个很糟糕", sentiment=sentiment)
+        assert features.sentiment_overall == "NEGATIVE"

@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
-from app.clients import bedrock_claude, s3_audio
+from app.clients import bedrock_claude, comprehend_client, s3_audio, transcribe_client
 from app.models import Answer, Evaluation, Interview, Question
 from app.services.voice_analyzer import VoiceFeatures
 from app.services.voice_analyzer import analyze as analyze_voice
@@ -48,16 +48,25 @@ _DUMMY_VOICE = {
     "hesitation_count": 0,
     "volume_mean": 0,
     "volume_stability": 0,
+    # Sprint 8 Transcribe/Comprehend additions
+    "accurate_wpm": 0,
+    "accurate_speaking_sec": 0,
+    "low_confidence_ratio": 0,
+    "low_confidence_words": [],
+    "sentiment_overall": "UNKNOWN",
+    "sentiment_scores": {"positive": 0, "negative": 0, "neutral": 0, "mixed": 0},
     "transcribe_sentiment": {"overall": "NEUTRAL"},
 }
 
 
-async def _compute_voice_features(answer: Answer) -> dict:
+async def _compute_voice_features(answer: Answer, interview_id: str) -> dict:
     """Download user audio from S3 and analyze. FR-4 fault tolerance:
     - No s3_key (old data): fallback dummy, INFO log
     - S3 404/403: fallback dummy, WARNING log
     - PCM too short (<1s): fallback dummy, WARNING log
     - analyze() raises unexpectedly: let it propagate (evaluation_failed)
+
+    Sprint 8: also submit Transcribe job + detect sentiment to enrich features.
     """
     if not answer.user_audio_s3_key:
         logger.info("answer %s has no user_audio_s3_key; using dummy features", answer.id)
@@ -72,8 +81,39 @@ async def _compute_voice_features(answer: Answer) -> dict:
         )
         return {**_DUMMY_VOICE, "duration_total_sec": answer.duration_sec}
 
+    # Sprint 8: submit + wait for Transcribe job (idempotent on job_name)
+    words = None
+    job_name = f"interviewer-{interview_id[:8]}-{answer.question_id[:8]}"
     try:
-        features: VoiceFeatures = analyze_voice(pcm, sample_rate=16000, transcript=answer.transcript_text)
+        await transcribe_client.submit_job(answer.user_audio_s3_key, job_name)
+        result = await transcribe_client.wait_for_completion(job_name)
+        if result and result.get("status") == "COMPLETED":
+            words = await transcribe_client.parse_words(result)
+            logger.info("transcribe got %d words for answer %s", len(words), answer.id)
+        else:
+            logger.warning(
+                "transcribe %s status=%s; proceeding without word timings",
+                job_name, result.get("status") if result else "NONE",
+            )
+    except Exception:
+        logger.exception("transcribe failed for answer %s; fallback to PCM-only", answer.id)
+
+    # Sprint 8: sentiment analysis on transcript text
+    sentiment = None
+    if answer.transcript_text.strip():
+        try:
+            sentiment = await comprehend_client.detect_sentiment(answer.transcript_text)
+        except Exception:
+            logger.exception("comprehend failed for answer %s", answer.id)
+
+    try:
+        features: VoiceFeatures = analyze_voice(
+            pcm,
+            sample_rate=16000,
+            transcript=answer.transcript_text,
+            words=words,
+            sentiment=sentiment,
+        )
     except ValueError as e:
         # PCM too short — expected, fallback silently
         logger.warning("voice analysis skipped for answer %s: %s", answer.id, e)
@@ -143,7 +183,7 @@ async def _run_pipeline(
     per_q_evals: list[Evaluation] = []
 
     for q, a in qa_pairs:
-        voice_features = await _compute_voice_features(a)
+        voice_features = await _compute_voice_features(a, interview_id)
         prompt = stage1_prompt(
             question=q.question_text,
             transcript=a.transcript_text,

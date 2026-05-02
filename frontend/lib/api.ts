@@ -54,6 +54,12 @@ export interface EvaluationOut {
     hesitation_count?: number;
     volume_mean?: number;
     volume_stability?: number;
+    accurate_wpm?: number;
+    accurate_speaking_sec?: number;
+    low_confidence_ratio?: number;
+    low_confidence_words?: string[];
+    sentiment_overall?: string;
+    sentiment_scores?: { positive?: number; negative?: number; neutral?: number; mixed?: number };
   };
 }
 
