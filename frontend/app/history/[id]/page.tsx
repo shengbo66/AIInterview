@@ -209,7 +209,23 @@ export default function InterviewDetailPage() {
                       <span className="text-neutral-500">
                         表达 <span className="text-neutral-300">{ev.expression_score}</span>
                       </span>
+                      <span className="text-neutral-500">
+                        语音 <span className="text-neutral-300">{ev.voice_score}</span>
+                      </span>
                     </div>
+                    {ev.voice_features && (ev.voice_features.duration_total_sec ?? 0) > 0 ? (
+                      <div className="text-xs text-neutral-500">
+                        ⚡ 语速 {(ev.voice_features.talk_speed_cps ?? 0).toFixed(1)} 字/秒 · 停顿{" "}
+                        {ev.voice_features.pause_count ?? 0} 次 · 填充词{" "}
+                        {ev.voice_features.filler_word_count ?? 0} 个
+                        {(ev.voice_features.filler_words_detected?.length ?? 0) > 0 && (
+                          <span className="text-neutral-600">
+                            {" "}
+                            ({ev.voice_features.filler_words_detected!.join(" ")})
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
                     {ev.improvement_suggestion && (
                       <p className="text-xs text-neutral-400">💡 {ev.improvement_suggestion}</p>
                     )}

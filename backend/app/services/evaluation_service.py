@@ -14,28 +14,67 @@ Sprint 3 scope: voice_score is always 0 (voice_features analysis deferred to Spr
 import logging
 
 from shared.eval_core.prompt_template import stage1_prompt, stage2_prompt
-from shared.eval_core.rubric import content_score_from_checkpoints, overall_result_label
+from shared.eval_core.rubric import (
+    content_score_from_checkpoints,
+    overall_result_label,
+    voice_score_from_features,
+)
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
 
-from app.clients import bedrock_claude
+from app.clients import bedrock_claude, s3_audio
 from app.models import Answer, Evaluation, Interview, Question
+from app.services.voice_analyzer import VoiceFeatures
+from app.services.voice_analyzer import analyze as analyze_voice
 
 logger = logging.getLogger("interviewer.evaluation")
 
-# Dummy voice features for Sprint 3 (no audio analysis yet)
+# Dummy voice features for fallback when audio is unavailable
 _DUMMY_VOICE = {
     "duration_total_sec": 0,
-    "talk_speed_wps": 0,
+    "duration_speaking_sec": 0,
+    "speaking_ratio": 0,
+    "talk_speed_cps": 0,
+    "talk_speed_wps": 0,  # kept for backward compat with older data
     "pause_count": 0,
     "pause_count_per_minute": 0,
     "longest_pause_sec": 0,
+    "filler_word_count": 0,
     "filler_word_ratio": 0,
     "filler_words_detected": [],
-    "speaking_ratio": 0,
     "transcribe_sentiment": {"overall": "NEUTRAL"},
 }
+
+
+async def _compute_voice_features(answer: Answer) -> dict:
+    """Download user audio from S3 and analyze. FR-4 fault tolerance:
+    - No s3_key (old data): fallback dummy, INFO log
+    - S3 404/403: fallback dummy, WARNING log
+    - PCM too short (<1s): fallback dummy, WARNING log
+    - analyze() raises unexpectedly: let it propagate (evaluation_failed)
+    """
+    if not answer.user_audio_s3_key:
+        logger.info("answer %s has no user_audio_s3_key; using dummy features", answer.id)
+        return {**_DUMMY_VOICE, "duration_total_sec": answer.duration_sec}
+
+    try:
+        pcm = await s3_audio.download_bytes(answer.user_audio_s3_key)
+    except Exception as e:
+        logger.warning(
+            "S3 download failed for answer %s key=%s: %s; using dummy features",
+            answer.id, answer.user_audio_s3_key, e,
+        )
+        return {**_DUMMY_VOICE, "duration_total_sec": answer.duration_sec}
+
+    try:
+        features: VoiceFeatures = analyze_voice(pcm, sample_rate=16000, transcript=answer.transcript_text)
+    except ValueError as e:
+        # PCM too short — expected, fallback silently
+        logger.warning("voice analysis skipped for answer %s: %s", answer.id, e)
+        return {**_DUMMY_VOICE, "duration_total_sec": answer.duration_sec}
+
+    return features.to_dict()
 
 
 async def evaluate_interview(
@@ -99,7 +138,7 @@ async def _run_pipeline(
     per_q_evals: list[Evaluation] = []
 
     for q, a in qa_pairs:
-        voice_features = {**_DUMMY_VOICE, "duration_total_sec": a.duration_sec}
+        voice_features = await _compute_voice_features(a)
         prompt = stage1_prompt(
             question=q.question_text,
             transcript=a.transcript_text,
@@ -114,7 +153,7 @@ async def _run_pipeline(
         checkpoints = parsed.get("content_checkpoints", {})
         c_score = content_score_from_checkpoints(checkpoints)
         e_score = int(parsed.get("expression_score", 0))
-        v_score = 0  # Sprint 3: no voice analysis
+        v_score = voice_score_from_features(voice_features)
         o_score = round(c_score * 0.5 + e_score * 0.3 + v_score * 0.2)
 
         suggestions = parsed.get("improvement_suggestions", [])

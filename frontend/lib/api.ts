@@ -39,6 +39,18 @@ export interface EvaluationOut {
   overall_result: string;
   improvement_suggestion: string;
   ideal_answer: string | null;
+  voice_features?: {
+    duration_total_sec?: number;
+    duration_speaking_sec?: number;
+    speaking_ratio?: number;
+    talk_speed_cps?: number;
+    pause_count?: number;
+    pause_count_per_minute?: number;
+    longest_pause_sec?: number;
+    filler_word_count?: number;
+    filler_word_ratio?: number;
+    filler_words_detected?: string[];
+  };
 }
 
 export interface InterviewDetail {

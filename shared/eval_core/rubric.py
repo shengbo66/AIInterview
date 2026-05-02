@@ -63,3 +63,48 @@ def rubric_markdown() -> str:
 
 ### Overall Result: Pass (>=75) / Borderline (50-74) / No-Pass (<50)
 """
+
+
+def voice_score_from_features(features: dict) -> int:
+    """Compute voice_score (0-100) from VoiceFeatures dict using deduction rules.
+
+    Base score 100. Deductions are additive, clamped to [0, 100].
+
+    Rules (see Sprint 6 Requirements DD-4):
+    - Talk speed: ideal 2.5-6 cps. <2.5 (too slow) or >6 (too fast) = -15
+                  <1.5 or >7 (extreme) = -25 total
+    - Pause rate: >15/min = -10, >25/min = -20 total
+    - Filler ratio: >0.08 = -15, >0.15 = -30 total
+    - Speaking ratio: <0.4 (half the time silent) = -20
+    - No-answer (duration=0 or speaking=0): return 0 (cannot evaluate voice)
+    """
+    duration_total = features.get("duration_total_sec", 0) or 0
+    duration_speaking = features.get("duration_speaking_sec", 0) or 0
+    if duration_total <= 0 or duration_speaking <= 0:
+        return 0
+
+    score = 100
+    cps = features.get("talk_speed_cps", 0) or 0
+    if cps > 0:  # Only deduct if we have speed data
+        if cps < 1.5 or cps > 7:
+            score -= 25
+        elif cps < 2.5 or cps > 6:
+            score -= 15
+
+    pauses_per_min = features.get("pause_count_per_minute", 0) or 0
+    if pauses_per_min > 25:
+        score -= 20
+    elif pauses_per_min > 15:
+        score -= 10
+
+    filler_ratio = features.get("filler_word_ratio", 0) or 0
+    if filler_ratio > 0.15:
+        score -= 30
+    elif filler_ratio > 0.08:
+        score -= 15
+
+    speaking_ratio = features.get("speaking_ratio", 0) or 0
+    if 0 < speaking_ratio < 0.4:
+        score -= 20
+
+    return max(0, min(100, score))

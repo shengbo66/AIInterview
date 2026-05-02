@@ -531,3 +531,84 @@ Round 2 Verdict: 两个 reviewer 全 PASS。
 - Epoxy 工单完全关闭后检查 SG 是否被回滚到 tv-agent-sg
 
 ---
+
+## Sprint 6 — voice_features 本地 PCM 分析
+**Timestamp**: 2026-05-02T10:39:00+08:00
+
+### User Input (raw)
+"继续做声音功能的开发" → "yes" (走 AIDLC 流程)
+
+### Workspace Detection
+- Project Type: **Brownfield** (resume mode)
+- Existing reverse-engineering artifacts: `aidlc-docs/inception/`
+- Sprint 5 complete (deployed). Sprint 6 is incremental feature.
+- Scope: 把 evaluation_service.py 第 28 行的 `_DUMMY_VOICE` 替换成真实 PCM 分析产出
+- Decision: Minimal AIDLC depth (small feature, 1 module)
+  - Requirements: minimal ✅
+  - Stories: skip (no new user persona, UI exists)
+  - Application Design: skip (1 module integration)
+  - Units: 1 unit (voice_analyzer)
+  - NFR: skip (纯本地计算无 NFR 关键变更)
+  - Code Gen + Build & Test: standard
+
+---
+
+### Team Review — Requirements
+**Timestamp**: 2026-05-02T10:50+08:00
+**Method**: 主 session 加载 skill Review Mode (PM + architect)
+
+**PM Review**: REVISE
+- HIGH: 缺业务价值量化 / 前端展示断链（OOS 排除前端但 AC 要求"用户看到"）
+- MED: 填充词清单来源说明、估算偏乐观
+
+**Architect Review**: REVISE
+- HIGH: numpy 依赖未验证（核实后发现未装）→ 改用 stdlib
+- HIGH: S3 下载阻塞 event loop → 定方案 `asyncio.to_thread`
+- MED: PCM 格式假设需写明（raw PCM16 LE 16kHz）
+- MED: voice_score 权重敏感性（AC-4 记录分布）
+- LOW: 容错分层、历史兼容
+
+**Actions Taken**:
+1. 核实 `pip list` 无 numpy → DD-6 改 stdlib struct 实现
+2. 核实 `bidi_interview_session` + `s3_audio.upload(content_type=audio/pcm)` → 确认 raw PCM16 LE mono 16kHz
+3. 加 FR-5 前端最小展示（1 行 voice 指标）
+4. FR-4 容错分层（404/ACL=fallback，pcm<1s=fallback，analyze 异常=raise）
+5. DD-7 `asyncio.to_thread(boto3.get_object)`（同 upload 模式）
+6. AC-4 加"记录 cps 分布校准"
+7. AC-8 产品 KPI（70% 候选人满意度 / Sprint 6.1 访谈）
+8. 估算 3-4h → 4.5-6h
+
+**Verdict**: PASS (v1.1 approved)
+
+---
+
+### Team Review — Code
+**Timestamp**: 2026-05-02T10:51+08:00
+**Method**: 主 session 加载 skill Review Mode (senior-dev + senior-tester)
+
+**senior-developer Review**: PASS (with 1 MINOR)
+- MINOR: 2 行 import from same module
+- LOW: DRY 违反（3 处同步 fields）
+- INFO: TS 类型定义 schema drift
+- ✅ Positive: 模块化清晰、FR-4 容错分层、扣分规则透明、stdlib 无 numpy
+
+**senior-tester Review**: REVISE (1 HIGH + 2 MED)
+- HIGH: `_compute_voice_features` 完全无单元测试 → 加 4 个 async mock tests
+- MED: `_detect_pauses` 边界缺失 → 加 3 个 tests (leading/trailing/exact-500ms)
+- MED: mixed language transcript → 加 2 tests (中英混合 + 全英文)
+- LOW: rubric 的 speaking_ratio=None 边界 → 加 3 tests
+
+**Actions Taken**:
+1. 加 4 个 `_compute_voice_features` async unit tests (no_s3_key/s3_error/short_pcm/success)
+2. 加 3 个 pause boundary tests
+3. 加 2 个 mixed-language analyze tests
+4. 加 3 个 rubric None-safety tests
+
+**Test Count Evolution**:
+- Pre-Sprint 6: 57 pytest + 6 vitest = 63
+- After Sprint 6 code: 93 pytest + 6 vitest = 99
+  - 后端新增 36 test: voice_analyzer 32 + rubric_voice 22 + compute_voice 4
+
+**Verdict**: PASS (after REVISE resolved)
+
+---

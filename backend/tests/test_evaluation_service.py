@@ -136,3 +136,100 @@ async def test_evaluation_failure_marks_status(db_with_huawei, mock_s3_upload):
     async with db_with_huawei() as db:
         iv = await db.get(Interview, session.interview_id)
         assert iv.status == "evaluation_failed"
+
+
+# ---------- _compute_voice_features unit tests (FR-4) ----------
+
+
+@pytest.mark.asyncio
+async def test_compute_voice_no_s3_key_returns_dummy():
+    """No audio recorded → fallback to dummy, log INFO."""
+    from app.models import Answer
+    from app.services.evaluation_service import _DUMMY_VOICE, _compute_voice_features
+
+    answer = Answer(
+        id="a1",
+        question_id="q1",
+        user_audio_s3_key=None,
+        transcript_text="测试",
+        duration_sec=3.5,
+    )
+    result = await _compute_voice_features(answer)
+    assert result["duration_total_sec"] == 3.5  # passthrough from answer
+    assert result["talk_speed_cps"] == 0
+    assert result["filler_word_count"] == 0
+    # Same shape as dummy
+    assert set(result.keys()) == set(_DUMMY_VOICE.keys())
+
+
+@pytest.mark.asyncio
+async def test_compute_voice_s3_error_returns_dummy():
+    """S3 download raises → fallback to dummy, log WARNING."""
+    from app.models import Answer
+    from app.services.evaluation_service import _compute_voice_features
+
+    answer = Answer(
+        id="a2",
+        question_id="q2",
+        user_audio_s3_key="interviews/xxx/q0.pcm",
+        transcript_text="测试",
+        duration_sec=5.0,
+    )
+    with patch("app.services.evaluation_service.s3_audio") as mock_s3:
+        mock_s3.download_bytes = AsyncMock(side_effect=Exception("NoSuchKey"))
+        result = await _compute_voice_features(answer)
+    assert result["duration_total_sec"] == 5.0
+    assert result["talk_speed_cps"] == 0
+
+
+@pytest.mark.asyncio
+async def test_compute_voice_short_pcm_returns_dummy():
+    """PCM < 1 second → analyze() raises ValueError → fallback."""
+    from app.models import Answer
+    from app.services.evaluation_service import _compute_voice_features
+
+    answer = Answer(
+        id="a3",
+        question_id="q3",
+        user_audio_s3_key="interviews/xxx/q0.pcm",
+        transcript_text="嗯",
+        duration_sec=0.5,
+    )
+    short_pcm = b"\x00\x00" * 100  # 100 samples = way below 1s threshold
+    with patch("app.services.evaluation_service.s3_audio") as mock_s3:
+        mock_s3.download_bytes = AsyncMock(return_value=short_pcm)
+        result = await _compute_voice_features(answer)
+    assert result["duration_total_sec"] == 0.5
+    assert result["talk_speed_cps"] == 0
+
+
+@pytest.mark.asyncio
+async def test_compute_voice_success_returns_real_features():
+    """Happy path: S3 returns valid PCM → analyze() → real features."""
+    import math
+    import struct
+
+    from app.models import Answer
+    from app.services.evaluation_service import _compute_voice_features
+
+    # Generate 2s speech-like PCM (above 1s threshold)
+    n = 16000 * 2
+    pcm = struct.pack(
+        f"<{n}h",
+        *[int(6000 * math.sin(2 * math.pi * 200 * i / 16000)) for i in range(n)],
+    )
+    answer = Answer(
+        id="a4",
+        question_id="q4",
+        user_audio_s3_key="interviews/xxx/q0.pcm",
+        transcript_text="我对射频方向很感兴趣",  # 9 Chinese chars
+        duration_sec=2.0,
+    )
+    with patch("app.services.evaluation_service.s3_audio") as mock_s3:
+        mock_s3.download_bytes = AsyncMock(return_value=pcm)
+        result = await _compute_voice_features(answer)
+
+    assert result["duration_total_sec"] == pytest.approx(2.0, abs=0.1)
+    assert result["talk_speed_cps"] > 0  # 9 chars / ~2s = ~4.5
+    assert "filler_words_detected" in result
+    assert "speaking_ratio" in result

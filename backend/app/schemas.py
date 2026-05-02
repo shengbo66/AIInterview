@@ -72,6 +72,7 @@ class EvaluationOut(BaseModel):
     overall_result: str
     improvement_suggestion: str
     ideal_answer: str | None
+    voice_features: dict = {}
 
 
 class InterviewDetail(BaseModel):

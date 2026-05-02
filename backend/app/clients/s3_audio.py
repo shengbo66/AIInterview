@@ -23,6 +23,11 @@ def _upload_sync(key: str, data: bytes, content_type: str) -> None:
     )
 
 
+def _download_sync(key: str) -> bytes:
+    resp = _get_client().get_object(Bucket=settings.s3_bucket, Key=key)
+    return resp["Body"].read()
+
+
 def _presign_sync(key: str, expires: int) -> str:
     return _get_client().generate_presigned_url(
         "get_object",
@@ -55,6 +60,15 @@ async def upload(key: str, data: bytes, content_type: str = "audio/webm") -> str
             if attempt < 2:
                 await asyncio.sleep(2**attempt)
     raise RuntimeError(f"S3 upload failed after 3 retries: {last_err}")
+
+
+async def download_bytes(key: str) -> bytes:
+    """Download object body as raw bytes. Propagates ClientError to caller.
+
+    Caller should handle NoSuchKey / AccessDenied specifically (voice analyzer
+    falls back to dummy features per Sprint 6 FR-4).
+    """
+    return await asyncio.to_thread(_download_sync, key)
 
 
 async def presign_get(key: str, expires: int | None = None) -> str:
