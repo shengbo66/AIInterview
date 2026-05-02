@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { base64FromInt16, int16FromBase64 } from "@/lib/audio-codec";
-import { getAccessToken } from "@/lib/auth";
+import { getAccessToken, ensureValidToken } from "@/lib/auth";
 
 type TranscriptLine = {
   role: "user" | "assistant";
@@ -167,6 +167,8 @@ export default function InterviewDemoPage() {
 
       // 3) WebSocket — connect BEFORE wiring the worklet, so we don't lose
       //    the first few PCM chunks while WS handshake is in flight.
+      //    Ensure token is fresh before connecting (auto-refresh if expired).
+      await ensureValidToken();
       const ws = new WebSocket(resolveWsUrl());
       wsRef.current = ws;
 

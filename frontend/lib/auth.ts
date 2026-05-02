@@ -97,3 +97,62 @@ export function authHeaders(): HeadersInit {
   const t = getAccessToken();
   return t ? { Authorization: `Bearer ${t}` } : {};
 }
+
+/**
+ * Check if the access token is expired (or about to expire in 60s).
+ * Returns true if token is missing or expired.
+ */
+function isTokenExpired(): boolean {
+  const token = getAccessToken();
+  if (!token) return true;
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const exp = payload.exp;
+    if (!exp) return true;
+    // Refresh 60s before actual expiry
+    return Date.now() / 1000 > exp - 60;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Refresh the access token using the stored refresh_token.
+ * Returns true if refresh succeeded, false if user must re-login.
+ */
+async function refreshAccessToken(): Promise<boolean> {
+  const refreshToken = typeof window !== "undefined"
+    ? sessionStorage.getItem("refresh_token")
+    : null;
+  if (!refreshToken) return false;
+
+  try {
+    const body = new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: CLIENT_ID,
+      refresh_token: refreshToken,
+    });
+    const resp = await fetch(`${COGNITO_DOMAIN}/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    sessionStorage.setItem("access_token", data.access_token);
+    if (data.id_token) sessionStorage.setItem("id_token", data.id_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ensure a valid access token is available. Auto-refreshes if expired.
+ * Returns the token, or null if refresh failed (caller should redirect to login).
+ */
+export async function ensureValidToken(): Promise<string | null> {
+  if (!isTokenExpired()) return getAccessToken();
+  const ok = await refreshAccessToken();
+  return ok ? getAccessToken() : null;
+}

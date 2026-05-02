@@ -2,7 +2,21 @@
 // Otherwise use explicit API_BASE (e.g. http://localhost:8000 for local dev).
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-import { authHeaders } from "./auth";
+import { authHeaders, ensureValidToken, redirectToLogin, isAuthEnabled } from "./auth";
+
+/** Fetch with auto-refresh. If token expired and refresh fails, redirect to login. */
+async function authedFetch(url: string, init?: RequestInit): Promise<Response> {
+  if (isAuthEnabled()) {
+    const token = await ensureValidToken();
+    if (!token) {
+      redirectToLogin();
+      // Never resolves — page navigates away
+      return new Promise(() => {});
+    }
+  }
+  const headers = { ...authHeaders(), ...(init?.headers ?? {}) };
+  return fetch(url, { ...init, headers });
+}
 
 export interface InterviewSummary {
   id: string;
@@ -78,19 +92,13 @@ export interface InterviewDetail {
 }
 
 export async function fetchInterviews(): Promise<InterviewSummary[]> {
-  const res = await fetch(`${API_BASE}/api/interviews`, {
-    cache: "no-store",
-    headers: authHeaders(),
-  });
+  const res = await authedFetch(`${API_BASE}/api/interviews`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch interviews: ${res.status}`);
   return res.json();
 }
 
 export async function fetchInterview(id: string): Promise<InterviewDetail> {
-  const res = await fetch(`${API_BASE}/api/interviews/${id}`, {
-    cache: "no-store",
-    headers: authHeaders(),
-  });
+  const res = await authedFetch(`${API_BASE}/api/interviews/${id}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to fetch interview ${id}: ${res.status}`);
   return res.json();
 }
@@ -100,9 +108,9 @@ export async function fetchAudioUrl(
   questionId: string,
   role: "assistant" | "user"
 ): Promise<string> {
-  const res = await fetch(
+  const res = await authedFetch(
     `${API_BASE}/api/interviews/${interviewId}/questions/${questionId}/audio?role=${role}`,
-    { cache: "no-store", headers: authHeaders() }
+    { cache: "no-store" },
   );
   if (!res.ok) throw new Error(`No audio: ${res.status}`);
   const data: { url: string } = await res.json();
