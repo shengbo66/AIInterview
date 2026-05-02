@@ -1,6 +1,6 @@
 # Interviewer v1.0
 
-AI 语音模拟面试平台 — **华为 · 硬件技术工程师（射频技术方向）实习生**
+AI 语音模拟面试平台 — **某公司 · 硬件技术工程师（射频技术方向）实习生**
 
 基于 Amazon Nova Sonic 双向语音流 + Claude 文本评估 + Transcribe 语音分析 + Comprehend 情感分析。
 
@@ -172,7 +172,7 @@ interviewer/
 │   │   │   ├── transcribe_client.py       # Async Transcribe job lifecycle
 │   │   │   ├── comprehend_client.py       # Sentiment detection
 │   │   ├── models.py                  # 5 tables: interview/question/answer/evaluation/company_style
-│   │   ├── seed/                      # Huawei RF Intern seed data
+│   │   ├── seed/                      # Company-specific seed data
 │   │   └── config.py / db.py / schemas.py
 │   ├── assets/hello.pcm              # ❗ Nova Sonic bootstrap greeting
 │   ├── alembic/                       # DB migrations

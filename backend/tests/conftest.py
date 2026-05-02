@@ -45,15 +45,15 @@ async def db(session_factory) -> AsyncIterator[AsyncSession]:
 
 
 @pytest_asyncio.fixture
-async def db_with_huawei(session_factory):
-    """Seed a minimal Huawei CompanyStyle and return the session_factory."""
+async def db_with_company(session_factory):
+    """Seed a minimal company CompanyStyle and return the session_factory."""
     async with session_factory() as s:
         cs = CompanyStyle(
-            name="华为",
+            name="某公司",
             interviewer_style_tags=["结构化"],
             preferred_question_types=["技术深度"],
             sample_questions=["介绍一个射频项目", "阻抗匹配的重要性"],
-            prompt_context_text="华为面试评估四大维度：技术深度、问题解决、沟通协作、文化契合。",
+            prompt_context_text="某公司面试评估四大维度：技术深度、问题解决、沟通协作、文化契合。",
             is_builtin=True,
         )
         s.add(cs)

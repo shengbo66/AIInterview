@@ -28,7 +28,7 @@
 
 **unit-1 backend-core** — ✅ COMPLETE (2026-04-26)
 - 24 测试 pass，ruff 绿，本地 smoke 通过
-- FastAPI + async SQLAlchemy + Alembic + Huawei seed + REST endpoints
+- FastAPI + async SQLAlchemy + Alembic + company seed + REST endpoints
 
 **unit-2 interview-engine Functional Design + Code Plan** — ✅ APPROVED (2026-04-26)
 

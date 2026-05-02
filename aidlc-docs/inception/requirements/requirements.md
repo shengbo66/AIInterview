@@ -23,7 +23,7 @@
 ### 1.2 Key Differentiators
 
 1. **端到端语音交互**：使用 Amazon Nova Sonic 模型实现自然的双向语音对话
-2. **可定制面试风格**：支持按公司（华为、TCL、美的、字节、腾讯等）定制面试风格
+2. **可定制面试风格**：支持按公司（某公司、TCL、美的、字节、腾讯等）定制面试风格
 3. **多维度评估**：内容、表达、语音维度三位一体
 4. **时尚的 UI**：采用社区最新 UI 技术（Next.js 15 + shadcn/ui + Framer Motion），视觉对标 Linear / Vercel / Cal.com
 

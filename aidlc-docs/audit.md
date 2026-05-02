@@ -34,7 +34,7 @@
 - Q1: B (学生，校招)
 - Q2: E (全部面试类型)
 - Q3: C (中英双语)
-- Q4: 外部导入公司面试风格（华为/TCL/美的等）— 需澄清来源
+- Q4: 外部导入公司面试风格（某公司/TCL/美的等）— 需澄清来源
 - Q5: 缺省 C（长面 45-60min 8-15题），可 D（自定义）
 - Q6: C (内容+表达+语音维度)
 - Q7: B (整体建议 + 每题改进 + 理想范答)
@@ -240,13 +240,13 @@ Docs synced: poc-verdict.md appended with zh section + methodology changes; refe
 
 Session accomplishments today:
 1. **Pre-POC validation** — Strands BidiAgent + Nova Sonic local setup validated (nova-sonic-poc/)
-2. **Project-wide team review** — identified HIGH items P1/D1/A1, decided: all-5-unit MVP + shared/eval_core + local Docker + Huawei focus
+2. **Project-wide team review** — identified HIGH items P1/D1/A1, decided: all-5-unit MVP + shared/eval_core + local Docker + single-company focus
 3. **ADRs added** — ADR-005 (Strands), ADR-006 (local Docker)
 4. **unit-1 Functional Design refined** — §7 Strands integration notes, added bidi cost fields
 5. **unit-1 Step 1** — shared/eval_core 提取，POC 改 import (28 tests pass)
 6. **unit-1 Step 2** — backend pyproject + app/config.py + db.py + models.py (5 tables + bidi fields)
 7. **unit-1 Step 3** — Alembic async setup + initial migration applied + seed
-8. **Seed pivoted** — 3 generic companies → 华为 only, with hardware RF intern role context (based on user-provided PDF + job posting screenshot)
+8. **Seed pivoted** — 3 generic companies → 单一公司 only, with hardware RF intern role context (based on user-provided PDF + job posting screenshot)
 9. **unit-1 Step 4a** — bedrock_claude.py async wrapper completed
 
 **In-progress when interrupted**: Step 4 (just started clients). Next: s3_audio.py + services/.
@@ -265,7 +265,7 @@ Resume instruction saved in aidlc-state.md.
   - `company_style_service.py`: list + create_from_upload; JSON validation (required fields, non-empty name, list-type checks), 1 MB cap, returns custom ValidationError (routed to 400 vs 413).
   - `audio_service.py`: thin wrapper composing record_service + s3_audio.presign_get, returns (url, ttl).
 - Step 5: schemas (11 Pydantic DTOs with `from_attributes=True`), errors.py (not_found/bad_request/payload_too_large helpers), 4 routers, main.py (FastAPI + lifespan hook → seed_if_empty on startup).
-- Step 6: tests (conftest with in-mem SQLite + AsyncMock S3 + httpx ASGI client; 4 test files, 24 tests); fixed packaging (`[tool.setuptools.packages.find] include=["app*"]`); `alembic/` added to ruff extend-exclude. All 24 tests pass 0.32s; ruff clean; local smoke (`/api/health` 200, Huawei seed auto-loaded).
+- Step 6: tests (conftest with in-mem SQLite + AsyncMock S3 + httpx ASGI client; 4 test files, 24 tests); fixed packaging (`[tool.setuptools.packages.find] include=["app*"]`); `alembic/` added to ruff extend-exclude. All 24 tests pass 0.32s; ruff clean; local smoke (`/api/health` 200, company seed auto-loaded).
 
 Ruff ignores added to pyproject: RUF001/002/003 (Chinese fullwidth punctuation is intentional), B008 (FastAPI Depends pattern).
 
@@ -334,7 +334,7 @@ Round 2 Verdict: 两个 reviewer 全 PASS。
 **User Input**: "A"（选择 Walking Skeleton 路径）
 **Output**: 
 - 创建 `frontend/` Next.js 15 + TypeScript + Tailwind
-- `backend/app/routers/demo_bidi.py`：WS endpoint 直接代理 Strands BidiAgent，硬编码 3 题华为风格 prompt
+- `backend/app/routers/demo_bidi.py`：WS endpoint 直接代理 Strands BidiAgent，硬编码 3 题公司风格 prompt
 - `frontend/app/page.tsx` + `public/pcm-worklet.js`：AudioWorklet 采 PCM16 + Web Audio 播放
 - 用户反馈："work" —— 第一次体验到产品
 

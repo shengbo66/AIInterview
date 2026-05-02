@@ -110,7 +110,7 @@
    WS 连接 +      │          │
    "start" msg    │  SETUP   │  1) 加载 Interview + CompanyStyle + resume_context
    ───────────► │          │  2) QuestionService.generate_first() → Q1 文本
-                  └────┬─────┘  3) 构造 BidiAgent system_prompt = Huawei style + role + Q1
+                  └────┬─────┘  3) 构造 BidiAgent system_prompt = company style + role + Q1
                        │        4) 启动 BidiAgent
                        ▼
                   ┌────────────┐   Sonic 输出音频帧 → 客户端 + buffer 到 q{idx}.pcm
@@ -369,7 +369,7 @@ class BidiSessionRecorder:
 
 1. **probe-on-weak**：`QuestionService.generate_next` 签名里已预留 `history`，Phase-2 加上 Claude 对最近一答评分 → 若 < threshold 则生成追问而非新主题。
 2. **多 voice 切换**：配置已抽出。
-3. **自定义 system_prompt 模板**：目前硬编码华为风格拼接；Phase-2 做模板化。
+3. **自定义 system_prompt 模板**：目前硬编码公司风格拼接；Phase-2 做模板化。
 
 ---
 

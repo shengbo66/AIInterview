@@ -2,8 +2,8 @@
 
 Scope:
   - 1 WebSocket path /ws/interview-demo
-  - Huawei + RF Intern hardcoded (role_title constant)
-  - system_prompt composed from seeded Huawei CompanyStyle
+  - Company + RF Intern hardcoded (role_title constant)
+  - system_prompt composed from seeded CompanyStyle
   - Interview/Question/Answer persisted as transcripts arrive
   - AI audio uploaded to S3 per turn (user audio upload: later sprint)
 
@@ -48,7 +48,7 @@ logger = logging.getLogger("interviewer.demo_bidi")
 
 router = APIRouter(tags=["demo"])
 
-# Locked for Sprint 2 — only this role, only Huawei style (seeded in unit-1).
+# Locked for Sprint 2 — only this role, only company style (seeded in unit-1).
 ROLE_TITLE = "硬件技术工程师（射频技术方向）实习生"
 
 # Bootstrap audio path (relative to backend/)
@@ -114,7 +114,7 @@ def _build_agent(system_prompt: str) -> BidiAgent:
 
 @router.websocket("/ws/interview-demo")
 async def interview_demo(websocket: WebSocket) -> None:
-    """Hardcoded Huawei RF Intern interview, persisted via BidiInterviewSession."""
+    """Hardcoded company RF Intern interview, persisted via BidiInterviewSession."""
     # Verify JWT from query param BEFORE accepting (browsers can't set
     # Authorization header on WebSocket).
     try:

@@ -167,7 +167,7 @@
 | P1 | PostgreSQL 迁移 (多用户并发) | 3h |
 | P2 | WAF + rate limiting | 1h |
 | P2 | Custom vocabulary (5G/RF/LNA 术语提高 Transcribe 准确率) | 1h |
-| P3 | 多场景支持 (不只华为 RF) | 4h |
+| P3 | 多场景支持 (不只单一公司 RF) | 4h |
 | P3 | 用户自助注册 (Cognito self-signup) | 1h |
 
 ---

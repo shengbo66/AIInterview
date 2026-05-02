@@ -19,12 +19,12 @@ from app.services.bidi_interview_session import (
 
 def test_compose_system_prompt_uses_style_text():
     cs = CompanyStyle(
-        name="华为",
+        name="某公司",
         prompt_context_text="四大维度：A、B、C、D。",
         sample_questions=["Q1", "Q2", "Q3"],
     )
     prompt = compose_system_prompt(cs, role_title="射频实习生")
-    assert "华为" in prompt
+    assert "某公司" in prompt
     assert "射频实习生" in prompt
     assert "四大维度：A、B、C、D。" in prompt
     assert "Q1" in prompt and "Q2" in prompt
@@ -41,18 +41,18 @@ def test_compose_handles_missing_optional_fields():
 # ------------------------------------------------------- setup & lifecycle
 
 
-async def test_setup_creates_interview_row(db_with_huawei):
-    session = BidiInterviewSession(db_with_huawei, role_title="RF Intern")
+async def test_setup_creates_interview_row(db_with_company):
+    session = BidiInterviewSession(db_with_company, role_title="RF Intern")
     await session.setup()
 
     assert session.interview_id is not None
-    assert "华为" in session.system_prompt
+    assert "某公司" in session.system_prompt
     assert "RF Intern" in session.system_prompt
 
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         iv = await db.get(Interview, session.interview_id)
         assert iv is not None
-        assert iv.company_name == "华为"
+        assert iv.company_name == "某公司"
         assert iv.role_title == "RF Intern"
         assert iv.status == "in_progress"
         assert iv.bidi_started_at is not None
@@ -64,8 +64,8 @@ async def test_setup_raises_when_no_style_seeded(session_factory):
         await session.setup()
 
 
-async def test_system_prompt_before_setup_raises(db_with_huawei):
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+async def test_system_prompt_before_setup_raises(db_with_company):
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     with pytest.raises(RuntimeError, match="call setup"):
         _ = session.system_prompt
 
@@ -74,12 +74,12 @@ async def test_system_prompt_before_setup_raises(db_with_huawei):
 
 
 async def test_assistant_final_creates_question_and_uploads_audio(
-    db_with_huawei, mock_s3_upload
+    db_with_company, mock_s3_upload
 ):
     """Q row is committed synchronously; S3 upload + s3_key patch are
     background tasks that complete after session.finalize() drains them.
     """
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
 
     # AI speaks: first buffer audio chunks, then a final assistant transcript
@@ -95,7 +95,7 @@ async def test_assistant_final_creates_question_and_uploads_audio(
         "is_final": True,
     })
     # Q row should be present even before finalize (synchronous commit):
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         qs = (await db.execute(select(Question))).scalars().all()
         assert len(qs) == 1
         assert qs[0].order_index == 0
@@ -108,13 +108,13 @@ async def test_assistant_final_creates_question_and_uploads_audio(
     s3_key = mock_s3_upload.await_args.args[0]
     assert s3_key.startswith(f"interviews/{session.interview_id}/q0.pcm")
 
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         q = (await db.execute(select(Question))).scalar_one()
         assert q.question_audio_s3_key == s3_key
 
 
-async def test_partial_transcript_is_ignored(db_with_huawei, mock_s3_upload):
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+async def test_partial_transcript_is_ignored(db_with_company, mock_s3_upload):
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
 
     await session.on_event({
@@ -124,16 +124,16 @@ async def test_partial_transcript_is_ignored(db_with_huawei, mock_s3_upload):
         "is_final": False,
     })
 
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         qs = (await db.execute(select(Question))).scalars().all()
         assert len(qs) == 0
     mock_s3_upload.assert_not_awaited()
 
 
 async def test_user_final_creates_answer_linked_to_last_question(
-    db_with_huawei, mock_s3_upload
+    db_with_company, mock_s3_upload
 ):
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
 
     # 1. AI asks Q1
@@ -148,7 +148,7 @@ async def test_user_final_creates_answer_linked_to_last_question(
         "text": "我做过一个5G射频模块项目...", "is_final": True,
     })
 
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         q = (await db.execute(select(Question))).scalar_one()
         a = (await db.execute(select(Answer))).scalar_one()
         assert a.question_id == q.id
@@ -156,21 +156,21 @@ async def test_user_final_creates_answer_linked_to_last_question(
         assert 0.9 < a.duration_sec < 1.1
 
 
-async def test_user_turn_before_any_question_is_dropped(db_with_huawei):
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+async def test_user_turn_before_any_question_is_dropped(db_with_company):
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
 
     await session.on_event({
         "type": "bidi_transcript_stream", "role": "user",
         "text": "hello?", "is_final": True,
     })
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         answers = (await db.execute(select(Answer))).scalars().all()
         assert answers == []
 
 
 async def test_multiple_user_finals_coalesce_to_single_answer(
-    db_with_huawei, mock_s3_upload
+    db_with_company, mock_s3_upload
 ):
     """Regression: Nova Sonic can emit multiple is_final=True user transcripts
     within the same user turn (each sentence / endpointed utterance).
@@ -178,7 +178,7 @@ async def test_multiple_user_finals_coalesce_to_single_answer(
     UNIQUE constraint on answer.question_id would cause IntegrityError
     and eventually crash the session.
     """
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
 
     # AI asks Q1
@@ -196,7 +196,7 @@ async def test_multiple_user_finals_coalesce_to_single_answer(
             "text": fragment, "is_final": True,
         })
 
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         answers = (await db.execute(select(Answer))).scalars().all()
         assert len(answers) == 1, "All fragments must coalesce to one Answer row"
         a = answers[0]
@@ -207,13 +207,13 @@ async def test_multiple_user_finals_coalesce_to_single_answer(
 
 
 async def test_s3_upload_failure_does_not_break_persistence(
-    db_with_huawei, monkeypatch
+    db_with_company, monkeypatch
 ):
     fail_up = AsyncMock(side_effect=RuntimeError("S3 boom"))
     monkeypatch.setattr(
         "app.services.bidi_interview_session.s3_audio.upload", fail_up
     )
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
 
     await session.on_event({
@@ -227,7 +227,7 @@ async def test_s3_upload_failure_does_not_break_persistence(
     # Let the background S3 upload task run to completion (it will fail)
     await session.finalize()
 
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         q = (await db.execute(select(Question))).scalar_one()
         assert q.question_text == "Q1?"
         assert q.question_audio_s3_key is None  # upload failed, key stays null
@@ -236,8 +236,8 @@ async def test_s3_upload_failure_does_not_break_persistence(
 # --------------------------------------------------------- event: usage
 
 
-async def test_usage_event_accumulates_to_finalize(db_with_huawei, mock_s3_upload):
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+async def test_usage_event_accumulates_to_finalize(db_with_company, mock_s3_upload):
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
 
     await session.on_event({
@@ -249,7 +249,7 @@ async def test_usage_event_accumulates_to_finalize(db_with_huawei, mock_s3_uploa
     })
     await session.finalize()
 
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         iv = await db.get(Interview, session.interview_id)
         assert iv.bidi_tokens_total == 600
         # cost = 150/1000*0.0034 + 450/1000*0.0136 = 0.00051 + 0.00612 = 0.00663
@@ -260,30 +260,30 @@ async def test_usage_event_accumulates_to_finalize(db_with_huawei, mock_s3_uploa
 
 
 async def test_finalize_marks_completed_and_sets_timestamps(
-    db_with_huawei, mock_s3_upload
+    db_with_company, mock_s3_upload
 ):
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
     await session.finalize()
 
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         iv = await db.get(Interview, session.interview_id)
         assert iv.status == "completed"
         assert iv.bidi_ended_at is not None
         assert iv.ended_at is not None
 
 
-async def test_finalize_is_idempotent(db_with_huawei, mock_s3_upload):
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+async def test_finalize_is_idempotent(db_with_company, mock_s3_upload):
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
     await session.finalize()
     # Second call should be a no-op, not raise
     await session.finalize()
 
 
-async def test_finalize_safe_never_raises(db_with_huawei, mock_s3_upload, monkeypatch):
+async def test_finalize_safe_never_raises(db_with_company, mock_s3_upload, monkeypatch):
     # Force inner finalize to blow up; finalize_safe should swallow
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
 
     async def boom(*_a, **_k):

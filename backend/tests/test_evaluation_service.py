@@ -9,12 +9,12 @@ from app.services.evaluation_service import evaluate_interview
 
 
 @pytest.mark.asyncio
-async def test_evaluation_pipeline_success(db_with_huawei, mock_s3_upload):
+async def test_evaluation_pipeline_success(db_with_company, mock_s3_upload):
     """Full pipeline: 2 Q/A pairs → per-question evals + overall eval."""
     from app.services.bidi_interview_session import BidiInterviewSession
 
     # Setup interview with 2 Q/A pairs
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
     await session.on_event({
         "type": "bidi_transcript_stream", "role": "assistant",
@@ -68,10 +68,10 @@ async def test_evaluation_pipeline_success(db_with_huawei, mock_s3_upload):
                 (stage2_response, mock_meta),
             ]
         )
-        await evaluate_interview(db_with_huawei, session.interview_id)
+        await evaluate_interview(db_with_company, session.interview_id)
 
     # Verify evaluations
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         evals = (await db.execute(select(Evaluation))).scalars().all()
         assert len(evals) == 3  # 2 per-question + 1 overall
 
@@ -88,11 +88,11 @@ async def test_evaluation_pipeline_success(db_with_huawei, mock_s3_upload):
 
 
 @pytest.mark.asyncio
-async def test_evaluation_skips_empty_interview(db_with_huawei, mock_s3_upload):
+async def test_evaluation_skips_empty_interview(db_with_company, mock_s3_upload):
     """Interview with 0 answered questions → status = evaluation_skipped."""
     from app.services.bidi_interview_session import BidiInterviewSession
 
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
     # Only AI question, no user answer
     await session.on_event({
@@ -101,9 +101,9 @@ async def test_evaluation_skips_empty_interview(db_with_huawei, mock_s3_upload):
     })
     await session.finalize(status="completed")
 
-    await evaluate_interview(db_with_huawei, session.interview_id)
+    await evaluate_interview(db_with_company, session.interview_id)
 
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         iv = await db.get(Interview, session.interview_id)
         assert iv.status == "evaluation_skipped"
         evals = (await db.execute(select(Evaluation))).scalars().all()
@@ -111,11 +111,11 @@ async def test_evaluation_skips_empty_interview(db_with_huawei, mock_s3_upload):
 
 
 @pytest.mark.asyncio
-async def test_evaluation_failure_marks_status(db_with_huawei, mock_s3_upload):
+async def test_evaluation_failure_marks_status(db_with_company, mock_s3_upload):
     """Claude failure → status = evaluation_failed."""
     from app.services.bidi_interview_session import BidiInterviewSession
 
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
     await session.on_event({
         "type": "bidi_transcript_stream", "role": "assistant",
@@ -131,9 +131,9 @@ async def test_evaluation_failure_marks_status(db_with_huawei, mock_s3_upload):
         mock_claude.invoke_json = AsyncMock(
             side_effect=RuntimeError("Claude API down")
         )
-        await evaluate_interview(db_with_huawei, session.interview_id)
+        await evaluate_interview(db_with_company, session.interview_id)
 
-    async with db_with_huawei() as db:
+    async with db_with_company() as db:
         iv = await db.get(Interview, session.interview_id)
         assert iv.status == "evaluation_failed"
 
@@ -241,7 +241,10 @@ async def test_compute_voice_success_returns_real_features():
         mock_tr.wait_for_completion = AsyncMock(return_value={"status": "COMPLETED"})
         mock_tr.parse_words = AsyncMock(return_value=[])
         mock_cp.detect_sentiment = AsyncMock(
-            return_value={"overall": "NEUTRAL", "scores": {"positive": 0.1, "negative": 0.1, "neutral": 0.7, "mixed": 0.1}}
+            return_value={
+                "overall": "NEUTRAL",
+                "scores": {"positive": 0.1, "negative": 0.1, "neutral": 0.7, "mixed": 0.1},
+            }
         )
         result = await _compute_voice_features(answer, "test-iv-id")
 

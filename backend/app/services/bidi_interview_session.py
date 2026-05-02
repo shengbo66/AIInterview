@@ -140,9 +140,9 @@ class BidiInterviewSession:
 
     # ------------------------------------------------------------------ setup
     async def setup(self) -> None:
-        """Load Huawei CompanyStyle, compose prompt, create Interview row."""
+        """Load company CompanyStyle, compose prompt, create Interview row."""
         async with self._sf() as db:
-            cs = await self._load_huawei_style(db)
+            cs = await self._load_company_style(db)
             self._company_style_id = cs.id
             self._system_prompt = compose_system_prompt(cs, self._role_title)
 
@@ -162,7 +162,7 @@ class BidiInterviewSession:
             self._interview_id = iv.id
             logger.info("session setup: interview_id=%s company=%s", iv.id, cs.name)
 
-    async def _load_huawei_style(self, db: AsyncSession) -> CompanyStyle:
+    async def _load_company_style(self, db: AsyncSession) -> CompanyStyle:
         res = await db.execute(
             select(CompanyStyle).where(CompanyStyle.is_builtin.is_(True)).limit(1)
         )

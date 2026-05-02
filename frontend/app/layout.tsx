@@ -8,7 +8,7 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   title: "AI 模拟面试",
-  description: "华为 · 硬件技术工程师（射频技术方向）实习生 AI 面试平台",
+  description: "某公司 · 硬件技术工程师（射频技术方向）实习生 AI 面试平台",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

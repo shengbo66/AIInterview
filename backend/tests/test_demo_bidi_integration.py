@@ -74,9 +74,9 @@ class FakeBidiAgent:
 
 # ------------------------------------------------------------- fixtures
 @pytest_asyncio.fixture
-async def _huawei_in_mem_db(monkeypatch, tmp_path):
+async def _company_in_mem_db(monkeypatch, tmp_path):
     """
-    Replace the app's SessionLocal with an in-memory SQLite engine, seed Huawei,
+    Replace the app's SessionLocal with an in-memory SQLite engine, seed company,
     and patch both `app.db.SessionLocal` AND `app.routers.demo_bidi.SessionLocal`
     (the router imported it by name).
     """
@@ -100,15 +100,15 @@ async def _huawei_in_mem_db(monkeypatch, tmp_path):
         await conn.run_sync(Base.metadata.create_all)
     SF = async_sessionmaker(engine, expire_on_commit=False)
 
-    # Seed Huawei
+    # Seed company
     async with SF() as s:
         s.add(
             CompanyStyle(
-                name="华为",
+                name="某公司",
                 interviewer_style_tags=["结构化"],
                 preferred_question_types=["技术深度"],
                 sample_questions=["介绍射频项目"],
-                prompt_context_text="华为四大维度",
+                prompt_context_text="某公司面试维度",
                 is_builtin=True,
             )
         )
@@ -181,7 +181,7 @@ def _transcript(role: str, text: str, is_final: bool = True) -> dict:
 
 
 async def test_full_conversation_two_qa_persists_and_forwards(
-    _huawei_in_mem_db, _patch_s3, _patch_agent, _patch_eval
+    _company_in_mem_db, _patch_s3, _patch_agent, _patch_eval
 ) -> None:
     """End-to-end: FakeAgent does Q1→user answers→Q2→user answers→complete."""
     script: list[tuple[str, Any]] = [
@@ -260,7 +260,7 @@ async def test_full_conversation_two_qa_persists_and_forwards(
     )
 
     # Persistence assertions
-    SF = _huawei_in_mem_db
+    SF = _company_in_mem_db
     assert interview_id, f"never saw session_ready with interview_id; got {types}"
     async with SF() as db:
         # Debug: count rows regardless of FK for triage
@@ -275,7 +275,7 @@ async def test_full_conversation_two_qa_persists_and_forwards(
         )
         iv = await db.get(Interview, interview_id)
         assert iv is not None, "interview row missing"
-        assert iv.company_name == "华为"
+        assert iv.company_name == "某公司"
         assert iv.status == "completed", f"status is {iv.status}"
         assert iv.bidi_tokens_total == 1300
         assert iv.bidi_ended_at is not None
@@ -302,7 +302,7 @@ async def test_full_conversation_two_qa_persists_and_forwards(
 
 
 async def test_audio_forwarding_not_blocked_by_slow_persistence(
-    _huawei_in_mem_db, _patch_agent, monkeypatch
+    _company_in_mem_db, _patch_agent, monkeypatch
 ) -> None:
     """If session.on_event is slow, audio frames should still reach client fast."""
     from unittest.mock import AsyncMock
@@ -389,7 +389,7 @@ async def test_setup_failure_closes_ws_with_error(
 # ============================================================================
 
 async def test_bootstrap_hello_injected_before_ws_audio(
-    _huawei_in_mem_db, _patch_s3, _patch_agent, _patch_eval
+    _company_in_mem_db, _patch_s3, _patch_agent, _patch_eval
 ) -> None:
     """recv() must yield bootstrap hello chunks BEFORE reading any WS message.
 
@@ -425,7 +425,7 @@ async def test_bootstrap_hello_injected_before_ws_audio(
 
 
 async def test_bootstrap_triggers_session_without_client_audio(
-    _huawei_in_mem_db, _patch_s3, _patch_agent, _patch_eval
+    _company_in_mem_db, _patch_s3, _patch_agent, _patch_eval
 ) -> None:
     """The full pipeline should complete a conversation EVEN IF client sends 0 ws audio.
 
@@ -465,7 +465,7 @@ async def test_bootstrap_triggers_session_without_client_audio(
     assert received_types.count("bidi_transcript_stream") >= 2
     assert interview_id
 
-    SF = _huawei_in_mem_db
+    SF = _company_in_mem_db
     async with SF() as db:
         iv = await db.get(Interview, interview_id)
         assert iv is not None
@@ -479,12 +479,12 @@ async def test_bootstrap_triggers_session_without_client_audio(
 # ============================================================================
 
 async def test_client_disconnects_midway_interview_finalized(
-    db_with_huawei, mock_s3_upload
+    db_with_company, mock_s3_upload
 ) -> None:
     """Client closes WS mid-session; finalize must still mark bidi_ended_at."""
     from app.services.bidi_interview_session import BidiInterviewSession
 
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
     # Simulate a partial turn (Q persisted, user answer never arrives)
     await session.on_event({
@@ -494,7 +494,7 @@ async def test_client_disconnects_midway_interview_finalized(
     # Client "disconnects" — router calls finalize_safe
     await session.finalize_safe()
 
-    SF = db_with_huawei
+    SF = db_with_company
     async with SF() as db:
         iv = await db.get(Interview, session.interview_id)
         assert iv is not None
@@ -505,20 +505,20 @@ async def test_client_disconnects_midway_interview_finalized(
 
 
 async def test_agent_run_raises_still_finalizes(
-    db_with_huawei, mock_s3_upload
+    db_with_company, mock_s3_upload
 ) -> None:
     """When agent raises mid-session (e.g. Sonic ValidationException),
     session.finalize_safe must still mark the interview ended."""
     from app.services.bidi_interview_session import BidiInterviewSession
 
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
     # Emit some events (representing partial conversation)
     await session.on_event(_transcript("assistant", "问题一", is_final=True))
     # Simulate the router's finally block after agent.run raised
     await session.finalize_safe()
 
-    SF = db_with_huawei
+    SF = db_with_company
     async with SF() as db:
         iv = await db.get(Interview, session.interview_id)
         assert iv is not None
@@ -527,12 +527,12 @@ async def test_agent_run_raises_still_finalizes(
 
 
 async def test_ws_send_failure_does_not_deadlock(
-    db_with_huawei, mock_s3_upload
+    db_with_company, mock_s3_upload
 ) -> None:
     """If persistence/background tasks fail, finalize still completes cleanly."""
     from app.services.bidi_interview_session import BidiInterviewSession
 
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
     # Emit several events quickly; any mid-flight failure should be swallowed
     for _ in range(10):
@@ -541,7 +541,7 @@ async def test_ws_send_failure_does_not_deadlock(
     # finalize_safe must not raise even if something went wrong
     await session.finalize_safe()
 
-    SF = db_with_huawei
+    SF = db_with_company
     async with SF() as db:
         iv = await db.get(Interview, session.interview_id)
         assert iv is not None
@@ -597,11 +597,11 @@ def test_turn_buffer_flush_resets_state():
 # Session interruption handling
 # ============================================================================
 
-async def test_interruption_does_not_leak_ai_audio(db_with_huawei, mock_s3_upload):
+async def test_interruption_does_not_leak_ai_audio(db_with_company, mock_s3_upload):
     """When Sonic sends bidi_interruption, the current AI turn's audio buffer
     should be cleared, so the next turn's Question doesn't inherit stale bytes."""
     from app.services.bidi_interview_session import BidiInterviewSession
-    session = BidiInterviewSession(db_with_huawei, role_title="RF")
+    session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
 
     # AI starts speaking, emits audio
@@ -634,7 +634,7 @@ async def test_interruption_does_not_leak_ai_audio(db_with_huawei, mock_s3_uploa
 
 
 async def test_ws_send_failure_on_connection_restart_keeps_session_alive(
-    _huawei_in_mem_db, _patch_s3, _patch_agent, _patch_eval
+    _company_in_mem_db, _patch_s3, _patch_agent, _patch_eval
 ) -> None:
     """Regression (2026-04-30): previously a failed ws.send_json would re-raise
     and kill the Strands session mid-recovery. Nova Sonic emits
@@ -706,7 +706,7 @@ async def test_ws_send_failure_on_connection_restart_keeps_session_alive(
         f"expected >=2 transcripts, got {received_types}"
     )
 
-    SF = _huawei_in_mem_db
+    SF = _company_in_mem_db
     async with SF() as db:
         iv = await db.get(Interview, interview_id)
         assert iv is not None
