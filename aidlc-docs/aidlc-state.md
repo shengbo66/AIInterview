@@ -4,8 +4,8 @@
 - **Project Name**: Interviewer (Mock Interview Platform)
 - **Project Type**: Greenfield
 - **Start Date**: 2026-04-25T21:14:51+08:00
-- **Last Session End**: 2026-05-02T12:30:00+08:00
-- **Current Stage**: **Sprint 8 完成 — Transcribe + Comprehend live，WPM 精确 / 低置信词 / 情感分析工作**
+- **Last Session End**: 2026-05-02T13:35:00+08:00
+- **Current Stage**: **🏷️ v1.0.0 Released — 待客户反馈后迭代**
 
 ## Workflow Note
 正式 AIDLC unit-by-unit 流程（unit-1..unit-5）在 2026-04-28 与 PM review 之后**转向 Agile Sprint 模式**（walking skeleton → 增量迭代），理由：用户 3 天未接触产品，需要立即建立反馈闭环。原 AIDLC 设计文档（requirements, unit-of-work, unit-2-design）作为"北极星"保留，但执行按 Sprint 推进。
@@ -121,6 +121,28 @@
 - 并行 Transcribe submit/wait (senior-dev review 提的)
 - UX polish: tooltip 解释 voice metrics
 - 收集 3+ 候选人真实 demo 反馈
+
+---
+
+## 🏷️ v1.0.0 Milestone (2026-05-02)
+
+**Tag**: `v1.0.0`
+**Status**: Released — 待客户反馈后迭代
+
+### v1.0 交付物
+- 20 个语音评估指标（PCM 本地 14 + Transcribe 4 + Comprehend 2）
+- 128 pytest + 6 vitest + ruff + tsc 全绿
+- 生产部署: CloudFront + EC2 Tokyo + Cognito auth
+- Demo URL: https://d1hlahtkv3v1q6.cloudfront.net
+- 单面试成本: ~$0.15
+
+### v1.0 已知限制
+- SQLite 单用户（多用户需迁移 PostgreSQL）
+- Transcribe job 串行等待（5 个 answer 串行 ~220s）
+- 无 WAF / rate limiting
+- 无 Playwright E2E 测试
+- `datetime.utcnow()` deprecation warnings (192 个)
+- EC2 SG 仍在 Epoxy isolated SG 上（加了自定义规则）
 
 ---
 

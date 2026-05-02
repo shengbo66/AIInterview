@@ -651,3 +651,49 @@ Round 2 Verdict: 两个 reviewer 全 PASS。
 - `17b1e51` feat(voice): real PCM analysis replaces dummy voice_features
 
 ---
+
+## Sprint 7 — voice_features Tier 1 扩展
+**Timestamp**: 2026-05-02T10:39 ~ 11:25
+**Duration**: ~45 min
+
+- 新增 4 字段: volume_mean / volume_stability / first_response_delay_sec / hesitation_count
+- 重构 `_detect_pauses` → (leading, inter, trailing) 解决 architect 提的 double-counting
+- rubric 新增 3 条扣分规则
+- 前端条件性 🎚 指标行
+- S3 CORS 配置修复 PlayButton 跨域问题
+- 真实回算: Q1 首答延迟 15.36s, Q2 音量不稳 CV=0.815
+- Tests: 57→105 pytest (+48)
+
+---
+
+## Sprint 8 — Amazon Transcribe + Comprehend 集成
+**Timestamp**: 2026-05-02T11:46 ~ 12:42
+**Duration**: ~1h
+
+- transcribe_client.py: PCM→WAV 封装 + 幂等 submit + poll + parse_words
+- comprehend_client.py: 情感检测
+- voice_analyzer 加 6 字段: accurate_wpm / accurate_speaking_sec / low_confidence_ratio / low_confidence_words / sentiment_overall / sentiment_scores
+- rubric 加 2 扣分规则 (low_conf >20% -10, NEGATIVE -5)
+- 前端 📊 行: 精确语速 / 清晰度 / 疑似不清词 / 情感
+- IAM policy 加 transcribe + comprehend 权限
+- 真实回算: WPM 127-201, Q1 low_conf 18.5%, Q4 POSITIVE, 耗时 219s
+- Tests: 105→128 pytest (+23)
+
+---
+
+## Token Refresh Fix
+**Timestamp**: 2026-05-02T12:42 ~ 12:45
+- Cognito access token 1h 过期导致 401
+- 加 ensureValidToken() + refreshAccessToken() + authedFetch() wrapper
+- WS 连接前也 await ensureValidToken()
+
+---
+
+## v1.0.0 Release
+**Timestamp**: 2026-05-02T13:35
+- README.md 全面更新
+- aidlc-state.md 标记 v1.0 milestone
+- Git tag v1.0.0
+- 复盘 Lessons Learnt 文档
+
+---
