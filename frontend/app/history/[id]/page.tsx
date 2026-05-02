@@ -41,18 +41,33 @@ function PlayButton({
   role: "assistant" | "user";
 }) {
   const [playing, setPlaying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const ctxRef = useRef<AudioContext | null>(null);
 
   const play = async () => {
+    setError(null);
     try {
       const url = await fetchAudioUrl(interviewId, questionId, role);
-      // Fetch raw PCM16 16kHz mono bytes
+      // Fetch raw PCM16 16kHz mono bytes (both user input and Sonic output use 16kHz)
       const resp = await fetch(url);
+      if (!resp.ok) throw new Error(`S3 fetch failed: ${resp.status}`);
       const arrayBuf = await resp.arrayBuffer();
-      const pcmData = new Int16Array(arrayBuf);
+      if (arrayBuf.byteLength === 0) throw new Error("empty audio data");
+      // Align to even byte boundary (PCM16 = 2 bytes/sample)
+      const alignedLen = arrayBuf.byteLength - (arrayBuf.byteLength % 2);
+      const pcmData = new Int16Array(arrayBuf, 0, alignedLen / 2);
 
-      // Convert Int16 PCM to Float32 for Web Audio
-      const ctx = new AudioContext({ sampleRate: 16000 });
+      // Reuse AudioContext. Must be created inside user-gesture handler
+      // to satisfy browser auto-play policy.
+      if (!ctxRef.current || ctxRef.current.state === "closed") {
+        ctxRef.current = new AudioContext({ sampleRate: 16000 });
+      }
+      const ctx = ctxRef.current;
+      if (ctx.state === "suspended") {
+        await ctx.resume();
+      }
+
       const audioBuffer = ctx.createBuffer(1, pcmData.length, 16000);
       const channel = audioBuffer.getChannelData(0);
       for (let i = 0; i < pcmData.length; i++) {
@@ -66,7 +81,10 @@ function PlayButton({
       source.onended = () => setPlaying(false);
       setPlaying(true);
       source.start();
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error("[PlayButton] play failed:", msg, e);
+      setError(msg);
       setPlaying(false);
     }
   };
@@ -77,13 +95,20 @@ function PlayButton({
   };
 
   return (
-    <button
-      onClick={playing ? stop : play}
-      className="text-xs text-neutral-500 hover:text-neutral-300 ml-1"
-      title={playing ? "停止" : "播放音频"}
-    >
-      {playing ? "⏹" : "▶️"}
-    </button>
+    <span className="inline-flex items-center gap-1 ml-1">
+      <button
+        onClick={playing ? stop : play}
+        className="text-xs text-neutral-500 hover:text-neutral-300"
+        title={playing ? "停止" : "播放音频"}
+      >
+        {playing ? "⏹" : "▶️"}
+      </button>
+      {error && (
+        <span className="text-xs text-red-400" title={error}>
+          ⚠
+        </span>
+      )}
+    </span>
   );
 }
 
