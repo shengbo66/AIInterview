@@ -4,8 +4,8 @@
 - **Project Name**: Interviewer (Mock Interview Platform)
 - **Project Type**: Greenfield
 - **Start Date**: 2026-04-25T21:14:51+08:00
-- **Last Session End**: 2026-05-02T00:02:00+08:00
-- **Current Stage**: **云上部署完成 ✅ + Cognito auth ✅ — 可对外 demo (https://d1hlahtkv3v1q6.cloudfront.net)**
+- **Last Session End**: 2026-05-02T11:00:00+08:00
+- **Current Stage**: **Sprint 6 voice_features 完成 — 真实 PCM 分析 live，5 个 answer 回算验证通过**
 
 ## Workflow Note
 正式 AIDLC unit-by-unit 流程（unit-1..unit-5）在 2026-04-28 与 PM review 之后**转向 Agile Sprint 模式**（walking skeleton → 增量迭代），理由：用户 3 天未接触产品，需要立即建立反馈闭环。原 AIDLC 设计文档（requirements, unit-of-work, unit-2-design）作为"北极星"保留，但执行按 Sprint 推进。
@@ -79,10 +79,24 @@
 - **经验教训**：暴露 :80 给 0.0.0.0/0 会被 Amazon Epoxy 自动隔离（DyePack.EC2IPAuthentication）
 - 63 自动化测试全绿
 
-**Sprint 6** — ⏳ 明天继续
-- 调声音功能（user 音频 playback bug 排查）
-- voice_features 分析
-- 暴露到公司内部 demo 给用户测
+**Sprint 6 voice_features** — ✅ COMPLETE (2026-05-02)
+- voice_analyzer.py: stdlib-only PCM16 分析（无 numpy 依赖）
+- 10 个 voice features: duration/speaking_ratio/cps/pause(count+rate+longest)/filler(count+ratio+list)
+- rubric.voice_score_from_features: 扣分制 0-100
+- evaluation_service._compute_voice_features: FR-4 分层容错
+- 前端详情页 Answer card 底部加 "⚡ 语速 X.X 字/秒 · 停顿 N 次 · 填充词 M 个"
+- **真实 141s session 回算验证**:
+  - 5 个 answer 全部正确分析
+  - cps 分布 4.95 ~ 7.14（用户语速偏快）
+  - filler_words_detected: 这个/呃/嗯/然后/啊（合理）
+  - voice_score 60~75（合理，非极端）
+- Tests: 93 pytest + 6 vitest 全绿（+36 后端新测试）
+- **Team Review**: PM+architect (Req REVISE→PASS), senior-dev+senior-tester (Code REVISE→PASS)
+
+**Sprint 7** — ⏳ 下一个
+- 面试功能 UX 优化
+- 收集外部用户反馈
+- 评估历史数据迁移（老 14 条 evaluation voice_features 全是 dummy）
 
 ---
 
