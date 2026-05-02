@@ -4,8 +4,8 @@
 - **Project Name**: Interviewer (Mock Interview Platform)
 - **Project Type**: Greenfield
 - **Start Date**: 2026-04-25T21:14:51+08:00
-- **Last Session End**: 2026-05-02T11:00:00+08:00
-- **Current Stage**: **Sprint 6 voice_features 完成 — 真实 PCM 分析 live，5 个 answer 回算验证通过**
+- **Last Session End**: 2026-05-02T11:25:00+08:00
+- **Current Stage**: **Sprint 7 完成 — voice_analyzer 扩展 4 个 Tier 1 维度 (volume/delay/hesitation), voice_score 更反映真实表现**
 
 ## Workflow Note
 正式 AIDLC unit-by-unit 流程（unit-1..unit-5）在 2026-04-28 与 PM review 之后**转向 Agile Sprint 模式**（walking skeleton → 增量迭代），理由：用户 3 天未接触产品，需要立即建立反馈闭环。原 AIDLC 设计文档（requirements, unit-of-work, unit-2-design）作为"北极星"保留，但执行按 Sprint 推进。
@@ -93,10 +93,23 @@
 - Tests: 93 pytest + 6 vitest 全绿（+36 后端新测试）
 - **Team Review**: PM+architect (Req REVISE→PASS), senior-dev+senior-tester (Code REVISE→PASS)
 
-**Sprint 7** — ⏳ 下一个
-- 面试功能 UX 优化
-- 收集外部用户反馈
-- 评估历史数据迁移（老 14 条 evaluation voice_features 全是 dummy）
+**Sprint 7 voice_features Tier 1 扩展** — ✅ COMPLETE (2026-05-02)
+- 新增 4 字段: volume_mean/volume_stability/first_response_delay_sec/hesitation_count
+- 重构 `_detect_pauses` 返回 (leading, inter, trailing)，解决 leading pause 与 first_delay 重复计数
+- rubric 新增 3 条扣分规则
+- 前端条件性 🎚 指标行 (only when meaningful)
+- S3 CORS 配置支持 PCM audio playback
+- 真实回算新发现:
+  - Q1/Q3/Q5 首答延迟 8-15s（用户听题后长沉默）
+  - Q2 音量不稳定 (CV=0.815)
+  - voice_score 范围 35-75（Sprint 6 是 60-75，更反映真实表现）
+- Tests: 105 pytest + 6 vitest
+
+**Sprint 8** — ⏳ 下一个候选
+- Transcribe 集成 (准确 WPM + 自信度 + 情感)
+- 用户主动打断 AI 的处理 (barge-in)
+- 多候选人 demo 收集反馈
+- 历史数据批量重算 (14 条老 eval 用新 voice_analyzer)
 
 ---
 
