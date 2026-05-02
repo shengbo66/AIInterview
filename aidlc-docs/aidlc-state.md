@@ -4,8 +4,8 @@
 - **Project Name**: Interviewer (Mock Interview Platform)
 - **Project Type**: Greenfield
 - **Start Date**: 2026-04-25T21:14:51+08:00
-- **Last Session End**: 2026-05-02T11:25:00+08:00
-- **Current Stage**: **Sprint 7 完成 — voice_analyzer 扩展 4 个 Tier 1 维度 (volume/delay/hesitation), voice_score 更反映真实表现**
+- **Last Session End**: 2026-05-02T12:30:00+08:00
+- **Current Stage**: **Sprint 8 完成 — Transcribe + Comprehend live，WPM 精确 / 低置信词 / 情感分析工作**
 
 ## Workflow Note
 正式 AIDLC unit-by-unit 流程（unit-1..unit-5）在 2026-04-28 与 PM review 之后**转向 Agile Sprint 模式**（walking skeleton → 增量迭代），理由：用户 3 天未接触产品，需要立即建立反馈闭环。原 AIDLC 设计文档（requirements, unit-of-work, unit-2-design）作为"北极星"保留，但执行按 Sprint 推进。
@@ -105,11 +105,22 @@
   - voice_score 范围 35-75（Sprint 6 是 60-75，更反映真实表现）
 - Tests: 105 pytest + 6 vitest
 
-**Sprint 8** — ⏳ 下一个候选
-- Transcribe 集成 (准确 WPM + 自信度 + 情感)
-- 用户主动打断 AI 的处理 (barge-in)
-- 多候选人 demo 收集反馈
-- 历史数据批量重算 (14 条老 eval 用新 voice_analyzer)
+**Sprint 8 Transcribe + Comprehend 集成** — ✅ COMPLETE (2026-05-02)
+- transcribe_client (WAV 封装 + 幂等 submit + poll)
+- comprehend_client (情感检测)
+- voice_analyzer 加 6 字段: accurate_wpm / accurate_speaking_sec / low_confidence_ratio / low_confidence_words / sentiment_overall / sentiment_scores
+- rubric 加 2 扣分规则 (low_conf >20% -10, NEGATIVE -5)
+- 前端 📊 行展示: 精确语速 / 清晰度 / 疑似不清词 / 情感
+- IAM policy 加 transcribe + comprehend 权限
+- 真实 141s session 回算: WPM 127-201, Q1 low_conf 18.5% (呃/啊), Q4 POSITIVE, 耗时 219s
+- 单 session 成本 ~$0.15 (+$0.024 Transcribe, ~free Comprehend)
+- Tests: 128 pytest + 6 vitest
+
+**Sprint 9** — ⏳ 下一个候选
+- 批量重算历史数据（14 条老 eval 缺 Sprint 6/7/8 features）
+- 并行 Transcribe submit/wait (senior-dev review 提的)
+- UX polish: tooltip 解释 voice metrics
+- 收集 3+ 候选人真实 demo 反馈
 
 ---
 
