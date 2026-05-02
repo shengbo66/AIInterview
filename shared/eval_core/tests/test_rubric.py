@@ -57,6 +57,11 @@ def _features(**overrides) -> dict:
         "filler_word_count": 1,
         "filler_word_ratio": 0.02,
         "filler_words_detected": ["嗯"],
+        # Sprint 7 defaults (ideal: no delay, no hesitation, stable volume)
+        "first_response_delay_sec": 0.5,
+        "hesitation_count": 1,
+        "volume_mean": 0.3,
+        "volume_stability": 0.2,
     }
     base.update(overrides)
     return base
@@ -151,3 +156,98 @@ class TestVoiceScoreFromFeatures:
     def test_speaking_ratio_exactly_zero_not_penalized(self):
         # Explicit 0 also should not deduct (strict < comparison)
         assert voice_score_from_features(_features(speaking_ratio=0)) == 100
+
+
+# ---------------- Sprint 7 Tier 1 deduction rules ----------------
+
+
+class TestFirstResponseDelayDeduction:
+    def test_no_delay_no_deduction(self):
+        assert voice_score_from_features(_features(first_response_delay_sec=1.0)) == 100
+
+    def test_tier1_delay_3_to_5(self):
+        assert voice_score_from_features(_features(first_response_delay_sec=3.5)) == 95
+
+    def test_tier2_delay_5_to_8(self):
+        assert voice_score_from_features(_features(first_response_delay_sec=6.0)) == 90
+
+    def test_tier3_delay_over_8(self):
+        assert voice_score_from_features(_features(first_response_delay_sec=10.0)) == 85
+
+    def test_boundary_3s_not_deducted(self):
+        assert voice_score_from_features(_features(first_response_delay_sec=3.0)) == 100
+
+    def test_boundary_3_01s_deducted(self):
+        assert voice_score_from_features(_features(first_response_delay_sec=3.01)) == 95
+
+
+class TestHesitationDeduction:
+    def test_low_hesitation_no_deduction(self):
+        # 2 hesitations in 30s = 4/min < 10 threshold
+        f = _features(duration_total_sec=30.0, hesitation_count=2)
+        assert voice_score_from_features(f) == 100
+
+    def test_high_hesitation_rate_tier1(self):
+        # 10 hesitations in 30s = 20/min > 10 threshold
+        f = _features(duration_total_sec=30.0, hesitation_count=6)
+        assert voice_score_from_features(f) == 95
+
+    def test_extreme_hesitation_rate_tier2(self):
+        # 15 hesitations in 30s = 30/min > 20 threshold
+        f = _features(duration_total_sec=30.0, hesitation_count=15)
+        assert voice_score_from_features(f) == 90
+
+    def test_hesitation_zero_duration_not_penalized(self):
+        # No duration → can't compute rate → no deduction
+        f = _features(duration_total_sec=0, duration_speaking_sec=0, hesitation_count=99)
+        assert voice_score_from_features(f) == 0  # zero duration = cannot evaluate
+
+
+class TestVolumeStabilityDeduction:
+    def test_stable_volume_no_deduction(self):
+        assert voice_score_from_features(_features(volume_stability=0.3)) == 100
+
+    def test_unstable_tier1(self):
+        assert voice_score_from_features(_features(volume_stability=0.8)) == 95
+
+    def test_very_unstable_tier2(self):
+        assert voice_score_from_features(_features(volume_stability=1.5)) == 90
+
+    def test_boundary_0_6(self):
+        assert voice_score_from_features(_features(volume_stability=0.6)) == 100
+        assert voice_score_from_features(_features(volume_stability=0.61)) == 95
+
+
+class TestSprint7DeductionsStack:
+    def test_all_new_deductions_stack(self):
+        # First delay (-10) + high hesitation (-5) + high volume instability (-5) = 80
+        f = _features(
+            first_response_delay_sec=6.0,
+            hesitation_count=6,
+            duration_total_sec=30.0,
+            volume_stability=0.8,
+        )
+        assert voice_score_from_features(f) == 80
+
+    def test_sprint6_and_sprint7_stack(self):
+        # Slow speed (-15) + delay (-5) + hesitation (-5) + volume (-5) = 70
+        f = _features(
+            talk_speed_cps=2.0,
+            first_response_delay_sec=3.5,
+            hesitation_count=6,
+            duration_total_sec=30.0,
+            volume_stability=0.8,
+        )
+        assert voice_score_from_features(f) == 70
+
+    def test_missing_sprint7_keys_treated_as_zero(self):
+        # Legacy data without Sprint 7 fields → no deductions from them
+        legacy = {
+            "duration_total_sec": 30.0,
+            "duration_speaking_sec": 28.0,
+            "speaking_ratio": 0.93,
+            "talk_speed_cps": 4.0,
+            "pause_count_per_minute": 4.0,
+            "filler_word_ratio": 0.02,
+        }
+        assert voice_score_from_features(legacy) == 100

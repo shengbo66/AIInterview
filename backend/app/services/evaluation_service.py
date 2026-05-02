@@ -43,6 +43,11 @@ _DUMMY_VOICE = {
     "filler_word_count": 0,
     "filler_word_ratio": 0,
     "filler_words_detected": [],
+    # Sprint 7 Tier 1 additions
+    "first_response_delay_sec": 0,
+    "hesitation_count": 0,
+    "volume_mean": 0,
+    "volume_stability": 0,
     "transcribe_sentiment": {"overall": "NEUTRAL"},
 }
 

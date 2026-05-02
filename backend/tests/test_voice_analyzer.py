@@ -110,29 +110,35 @@ class TestPauseDetection:
     def test_all_silence(self):
         pcm = _gen_silence(2.0)
         samples = _pcm16_to_ints(pcm)
-        pauses, total_silence = _detect_pauses(samples, SR)
-        # When peak RMS is 0, entire audio counts as silence
-        assert len(pauses) == 1
-        assert pauses[0] == pytest.approx(2.0, abs=0.05)
+        leading, inter, trailing, total_silence = _detect_pauses(samples, SR)
+        # All silent → counts as leading pause
+        assert len(leading) == 1
+        assert leading[0] == pytest.approx(2.0, abs=0.05)
+        assert inter == []
+        assert trailing == []
         assert total_silence == pytest.approx(2.0, abs=0.05)
 
     def test_continuous_tone_no_pause(self):
         pcm = _gen_tone(2.0)
         samples = _pcm16_to_ints(pcm)
-        pauses, total_silence = _detect_pauses(samples, SR)
-        assert pauses == []
-        assert total_silence < 0.1  # negligible
+        leading, inter, trailing, total_silence = _detect_pauses(samples, SR)
+        assert leading == []
+        assert inter == []
+        assert trailing == []
+        assert total_silence < 0.1
 
     def test_tone_silence_tone(self):
-        # 1s tone + 1s silence + 1s tone → 1 pause of ~1s
+        # 1s tone + 1s silence + 1s tone → 1 INTER pause
         pcm = _gen_tone(1.0) + _gen_silence(1.0) + _gen_tone(1.0)
         samples = _pcm16_to_ints(pcm)
-        pauses, _ = _detect_pauses(samples, SR)
-        assert len(pauses) == 1
-        assert pauses[0] == pytest.approx(1.0, abs=0.1)
+        leading, inter, trailing, _ = _detect_pauses(samples, SR)
+        assert leading == []
+        assert len(inter) == 1
+        assert inter[0] == pytest.approx(1.0, abs=0.1)
+        assert trailing == []
 
     def test_multiple_pauses(self):
-        # tone - silence - tone - silence - tone → 2 pauses
+        # tone - silence - tone - silence - tone → 2 inter pauses
         pcm = (
             _gen_tone(1.0)
             + _gen_silence(0.7)
@@ -141,39 +147,53 @@ class TestPauseDetection:
             + _gen_tone(1.0)
         )
         samples = _pcm16_to_ints(pcm)
-        pauses, _ = _detect_pauses(samples, SR)
-        assert len(pauses) == 2
+        leading, inter, trailing, _ = _detect_pauses(samples, SR)
+        assert leading == []
+        assert len(inter) == 2
+        assert trailing == []
 
     def test_short_silence_not_counted(self):
         # 200ms silence in middle → below _PAUSE_THRESHOLD_MS (500ms)
         pcm = _gen_tone(1.0) + _gen_silence(0.2) + _gen_tone(1.0)
         samples = _pcm16_to_ints(pcm)
-        pauses, _ = _detect_pauses(samples, SR)
-        assert pauses == []
+        _leading, inter, _trailing, _ = _detect_pauses(samples, SR)
+        assert inter == []  # too short
 
     def test_leading_silence_detected(self):
         # silence(0.8) + tone(2.0) — pause at the beginning
         pcm = _gen_silence(0.8) + _gen_tone(2.0)
         samples = _pcm16_to_ints(pcm)
-        pauses, _ = _detect_pauses(samples, SR)
-        assert len(pauses) == 1
-        assert pauses[0] == pytest.approx(0.8, abs=0.1)
+        leading, inter, trailing, _ = _detect_pauses(samples, SR)
+        assert len(leading) == 1
+        assert leading[0] == pytest.approx(0.8, abs=0.1)
+        assert inter == []
+        assert trailing == []
 
     def test_trailing_silence_detected(self):
-        # tone(2.0) + silence(0.8) — pause at the end (hits "Trailing silence" branch)
+        # tone(2.0) + silence(0.8) — pause at the end
         pcm = _gen_tone(2.0) + _gen_silence(0.8)
         samples = _pcm16_to_ints(pcm)
-        pauses, _ = _detect_pauses(samples, SR)
-        assert len(pauses) == 1
-        assert pauses[0] == pytest.approx(0.8, abs=0.1)
+        leading, inter, trailing, _ = _detect_pauses(samples, SR)
+        assert leading == []
+        assert inter == []
+        assert len(trailing) == 1
+        assert trailing[0] == pytest.approx(0.8, abs=0.1)
 
     def test_exactly_500ms_silence_counted(self):
-        # Exactly threshold — should count (frames_per_pause_min = 25, 500/20=25)
+        # Exactly threshold — should count as inter pause
         pcm = _gen_tone(1.0) + _gen_silence(0.5) + _gen_tone(1.0)
         samples = _pcm16_to_ints(pcm)
-        pauses, _ = _detect_pauses(samples, SR)
-        # Boundary inclusive: 25 frames ≥ 25 → counted
-        assert len(pauses) == 1
+        _leading, inter, _trailing, _ = _detect_pauses(samples, SR)
+        assert len(inter) == 1
+
+    def test_leading_plus_inter(self):
+        # silence(0.6) + tone + silence(0.8) + tone → 1 leading, 1 inter
+        pcm = _gen_silence(0.6) + _gen_tone(1.0) + _gen_silence(0.8) + _gen_tone(1.0)
+        samples = _pcm16_to_ints(pcm)
+        leading, inter, trailing, _ = _detect_pauses(samples, SR)
+        assert len(leading) == 1
+        assert len(inter) == 1
+        assert trailing == []
 
 
 # ---------- analyze() integration ----------
@@ -265,6 +285,11 @@ class TestVoiceFeaturesDataclass:
         assert vf.duration_total_sec == 0.0
         assert vf.filler_words_detected == []
         assert vf.transcribe_sentiment == {"overall": "NEUTRAL"}
+        # Sprint 7 additions
+        assert vf.first_response_delay_sec == 0.0
+        assert vf.hesitation_count == 0
+        assert vf.volume_mean == 0.0
+        assert vf.volume_stability == 0.0
 
     def test_to_dict_complete(self):
         vf = VoiceFeatures(duration_total_sec=5.0, filler_word_count=3)
@@ -280,6 +305,92 @@ class TestVoiceFeaturesDataclass:
             "filler_word_count",
             "filler_word_ratio",
             "filler_words_detected",
+            "first_response_delay_sec",
+            "hesitation_count",
+            "volume_mean",
+            "volume_stability",
             "transcribe_sentiment",
         }
         assert set(d.keys()) == expected_keys
+
+
+# ---------- Sprint 7 Tier 1 new metrics ----------
+
+
+class TestFirstResponseDelay:
+    def test_no_leading_silence_zero_delay(self):
+        pcm = _gen_tone(2.0)
+        features = analyze(pcm, SR, "你好")
+        assert features.first_response_delay_sec == pytest.approx(0.0, abs=0.1)
+
+    def test_short_leading_silence_captured(self):
+        # 400ms leading silence (< 500ms pause threshold) → should still show as delay
+        pcm = _gen_silence(0.4) + _gen_tone(1.5)
+        features = analyze(pcm, SR, "你好")
+        assert features.first_response_delay_sec == pytest.approx(0.4, abs=0.1)
+
+    def test_long_leading_silence_captured(self):
+        # 2s leading silence → should appear as delay
+        pcm = _gen_silence(2.0) + _gen_tone(1.5)
+        features = analyze(pcm, SR, "你好")
+        assert features.first_response_delay_sec == pytest.approx(2.0, abs=0.1)
+
+
+class TestHesitationCount:
+    def test_no_hesitation_continuous_tone(self):
+        pcm = _gen_tone(3.0)
+        features = analyze(pcm, SR, "你好")
+        assert features.hesitation_count == 0
+
+    def test_short_silence_counted_as_hesitation(self):
+        # 300ms silence between speech (in [200, 500) ms range)
+        pcm = _gen_tone(1.0) + _gen_silence(0.3) + _gen_tone(1.0)
+        features = analyze(pcm, SR, "你好")
+        assert features.hesitation_count == 1
+
+    def test_long_silence_NOT_counted_as_hesitation(self):
+        # 800ms silence → that's a pause, not a hesitation
+        pcm = _gen_tone(1.0) + _gen_silence(0.8) + _gen_tone(1.0)
+        features = analyze(pcm, SR, "你好")
+        assert features.hesitation_count == 0  # it's a pause now, not hesitation
+
+    def test_very_short_silence_NOT_counted(self):
+        # 100ms silence → below hesitation threshold (200ms)
+        pcm = _gen_tone(1.0) + _gen_silence(0.1) + _gen_tone(1.0)
+        features = analyze(pcm, SR, "你好")
+        assert features.hesitation_count == 0
+
+    def test_multiple_hesitations(self):
+        pcm = (
+            _gen_tone(0.8)
+            + _gen_silence(0.3)  # hesitation 1
+            + _gen_tone(0.8)
+            + _gen_silence(0.25)  # hesitation 2
+            + _gen_tone(0.8)
+        )
+        features = analyze(pcm, SR, "你好")
+        assert features.hesitation_count == 2
+
+
+class TestVolumeStats:
+    def test_constant_tone_low_volume_stability(self):
+        # Perfectly constant tone → stddev=0, CV=0
+        pcm = _gen_tone(2.0, amp=8000)
+        features = analyze(pcm, SR, "你好")
+        assert features.volume_stability < 0.1  # very stable
+        assert features.volume_mean > 0
+
+    def test_varying_amplitude_high_volume_instability(self):
+        # Speech-like (amplitude envelope) → higher CV
+        pcm = _gen_speech_like(3.0)
+        features = analyze(pcm, SR, "你好")
+        # speech_like has sin^0.5 envelope → moderate variability
+        assert features.volume_stability > 0.1
+        assert features.volume_mean > 0
+
+    def test_silent_audio_zero_volume(self):
+        # All silence can't be analyzed (too short); use quiet tone
+        pcm = _gen_tone(2.0, amp=50)  # very quiet
+        features = analyze(pcm, SR, "你好")
+        assert features.volume_mean >= 0
+        assert features.volume_mean < 0.01  # very quiet

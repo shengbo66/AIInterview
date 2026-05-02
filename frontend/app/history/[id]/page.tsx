@@ -239,16 +239,35 @@ export default function InterviewDetailPage() {
                       </span>
                     </div>
                     {ev.voice_features && (ev.voice_features.duration_total_sec ?? 0) > 0 ? (
-                      <div className="text-xs text-neutral-500">
-                        ⚡ 语速 {(ev.voice_features.talk_speed_cps ?? 0).toFixed(1)} 字/秒 · 停顿{" "}
-                        {ev.voice_features.pause_count ?? 0} 次 · 填充词{" "}
-                        {ev.voice_features.filler_word_count ?? 0} 个
-                        {(ev.voice_features.filler_words_detected?.length ?? 0) > 0 && (
-                          <span className="text-neutral-600">
-                            {" "}
-                            ({ev.voice_features.filler_words_detected!.join(" ")})
-                          </span>
-                        )}
+                      <div className="text-xs text-neutral-500 space-y-0.5">
+                        <div>
+                          ⚡ 语速 {(ev.voice_features.talk_speed_cps ?? 0).toFixed(1)} 字/秒 · 停顿{" "}
+                          {ev.voice_features.pause_count ?? 0} 次 · 填充词{" "}
+                          {ev.voice_features.filler_word_count ?? 0} 个
+                          {(ev.voice_features.filler_words_detected?.length ?? 0) > 0 && (
+                            <span className="text-neutral-600">
+                              {" "}
+                              ({ev.voice_features.filler_words_detected!.join(" ")})
+                            </span>
+                          )}
+                        </div>
+                        {/* Sprint 7: conditional Tier 1 metrics */}
+                        {(() => {
+                          const vf = ev.voice_features!;
+                          const parts: string[] = [];
+                          if ((vf.first_response_delay_sec ?? 0) > 2) {
+                            parts.push(`首答延迟 ${vf.first_response_delay_sec!.toFixed(1)} 秒`);
+                          }
+                          if ((vf.hesitation_count ?? 0) > 3) {
+                            parts.push(`犹豫 ${vf.hesitation_count} 次`);
+                          }
+                          if ((vf.volume_stability ?? 0) > 0.5) {
+                            parts.push("音量不稳");
+                          }
+                          return parts.length > 0 ? (
+                            <div className="text-neutral-600">🎚 {parts.join(" · ")}</div>
+                          ) : null;
+                        })()}
                       </div>
                     ) : null}
                     {ev.improvement_suggestion && (

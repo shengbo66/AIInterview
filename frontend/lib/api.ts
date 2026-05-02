@@ -50,6 +50,10 @@ export interface EvaluationOut {
     filler_word_count?: number;
     filler_word_ratio?: number;
     filler_words_detected?: string[];
+    first_response_delay_sec?: number;
+    hesitation_count?: number;
+    volume_mean?: number;
+    volume_stability?: number;
   };
 }
 

@@ -70,13 +70,17 @@ def voice_score_from_features(features: dict) -> int:
 
     Base score 100. Deductions are additive, clamped to [0, 100].
 
-    Rules (see Sprint 6 Requirements DD-4):
-    - Talk speed: ideal 2.5-6 cps. <2.5 (too slow) or >6 (too fast) = -15
-                  <1.5 or >7 (extreme) = -25 total
-    - Pause rate: >15/min = -10, >25/min = -20 total
-    - Filler ratio: >0.08 = -15, >0.15 = -30 total
-    - Speaking ratio: <0.4 (half the time silent) = -20
-    - No-answer (duration=0 or speaking=0): return 0 (cannot evaluate voice)
+    Rules (Sprint 6 + Sprint 7 additions):
+    - Talk speed: ideal 2.5-6 cps. <2.5 or >6 = -15; <1.5 or >7 (extreme) = -25
+    - Pause rate: >15/min = -10, >25/min = -20
+    - Filler ratio: >0.08 = -15, >0.15 = -30
+    - Speaking ratio: <0.4 = -20 (strict >0 to avoid penalizing missing data)
+    - No-answer (duration=0 or speaking=0): return 0
+
+    Sprint 7 Tier 1 additions:
+    - First response delay: >3s = -5, >5s = -10, >8s = -15
+    - Hesitation rate (per min): >10 = -5, >20 = -10
+    - Volume stability (CV): >0.6 = -5, >1.0 = -10
     """
     duration_total = features.get("duration_total_sec", 0) or 0
     duration_speaking = features.get("duration_speaking_sec", 0) or 0
@@ -85,7 +89,7 @@ def voice_score_from_features(features: dict) -> int:
 
     score = 100
     cps = features.get("talk_speed_cps", 0) or 0
-    if cps > 0:  # Only deduct if we have speed data
+    if cps > 0:
         if cps < 1.5 or cps > 7:
             score -= 25
         elif cps < 2.5 or cps > 6:
@@ -106,5 +110,28 @@ def voice_score_from_features(features: dict) -> int:
     speaking_ratio = features.get("speaking_ratio", 0) or 0
     if 0 < speaking_ratio < 0.4:
         score -= 20
+
+    # Sprint 7 Tier 1 deductions
+    first_delay = features.get("first_response_delay_sec", 0) or 0
+    if first_delay > 8:
+        score -= 15
+    elif first_delay > 5:
+        score -= 10
+    elif first_delay > 3:
+        score -= 5
+
+    hesitation_count = features.get("hesitation_count", 0) or 0
+    if duration_total > 0:
+        hesitation_rate = hesitation_count / (duration_total / 60.0)
+        if hesitation_rate > 20:
+            score -= 10
+        elif hesitation_rate > 10:
+            score -= 5
+
+    volume_stability = features.get("volume_stability", 0) or 0
+    if volume_stability > 1.0:
+        score -= 10
+    elif volume_stability > 0.6:
+        score -= 5
 
     return max(0, min(100, score))
