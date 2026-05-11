@@ -11,6 +11,7 @@ def stage1_prompt(
     role: str,
     language: str,
     style_tags: list[str] | None = None,
+    rubric_fn=rubric_markdown,
 ) -> str:
     style = ", ".join(style_tags) if style_tags else "标准行为面试风格"
     vf = voice_features
@@ -32,7 +33,7 @@ def stage1_prompt(
 - 情感倾向: {vf.get('transcribe_sentiment', {}).get('overall', 'NEUTRAL')}
 
 ## 评分 rubric
-{rubric_markdown()}
+{rubric_fn()}
 
 ## 输出格式（严格 JSON，不要任何额外文本，不要 markdown 代码块）
 {{

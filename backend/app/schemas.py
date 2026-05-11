@@ -14,6 +14,7 @@ class CompanyStyleOut(BaseModel):
     sample_questions: list[str]
     prompt_context_text: str
     is_builtin: bool
+    rubric_type: str = "faang"
     created_at: datetime
 
 
@@ -73,6 +74,7 @@ class EvaluationOut(BaseModel):
     improvement_suggestion: str
     ideal_answer: str | None
     voice_features: dict = {}
+    dimension_scores: dict = {}
 
 
 class InterviewDetail(BaseModel):
