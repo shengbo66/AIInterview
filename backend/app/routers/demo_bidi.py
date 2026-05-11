@@ -126,10 +126,31 @@ async def interview_demo(websocket: WebSocket) -> None:
         await websocket.close(code=4401, reason="unauthorized")
         return
 
+    # Read and validate style_id and lang from query params
+    style_id: str | None = websocket.query_params.get("style_id") or None
+    lang: str = websocket.query_params.get("lang", "zh")
+    if lang not in ("zh", "en"):
+        lang = "zh"
+
+    # If style_id is provided, validate it exists in DB
+    if style_id is not None:
+        async with SessionLocal() as db:
+            from app.models import CompanyStyle as _CS
+            cs_check = await db.get(_CS, style_id)
+            if cs_check is None:
+                logger.warning("WS invalid style_id=%s", style_id)
+                await websocket.close(code=4008, reason="invalid style_id")
+                return
+
     await websocket.accept()
     logger.info("WS demo connected at %s", datetime.now().isoformat())
 
-    session = BidiInterviewSession(SessionLocal, role_title=ROLE_TITLE)
+    session = BidiInterviewSession(
+        SessionLocal,
+        role_title=ROLE_TITLE,
+        company_style_id=style_id,
+        language=lang,
+    )
     try:
         await session.setup()
     except Exception:
