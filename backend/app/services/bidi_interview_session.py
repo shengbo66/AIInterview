@@ -98,10 +98,12 @@ class BidiInterviewSession:
         session_factory: async_sessionmaker[AsyncSession],
         role_title: str,
         s3_prefix: str = "interviews",
+        company_style_id: str | None = None,
     ) -> None:
         self._sf = session_factory
         self._role_title = role_title
         self._s3_prefix = s3_prefix
+        self._requested_company_style_id = company_style_id
         self._ai_buf = _TurnBuffer()
         self._user_buf = _TurnBuffer()
         self._interview_id: str | None = None
@@ -163,6 +165,14 @@ class BidiInterviewSession:
             logger.info("session setup: interview_id=%s company=%s", iv.id, cs.name)
 
     async def _load_company_style(self, db: AsyncSession) -> CompanyStyle:
+        if self._requested_company_style_id:
+            cs = await db.get(CompanyStyle, self._requested_company_style_id)
+            if cs is not None:
+                return cs
+            logger.warning(
+                "company_style_id=%s not found; falling back to default builtin",
+                self._requested_company_style_id,
+            )
         res = await db.execute(
             select(CompanyStyle).where(CompanyStyle.is_builtin.is_(True)).limit(1)
         )

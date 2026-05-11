@@ -17,8 +17,10 @@ from shared.eval_core.prompt_template import stage1_prompt, stage2_prompt
 from shared.eval_core.rubric import (
     content_score_from_checkpoints,
     overall_result_label,
+    rubric_markdown,
     voice_score_from_features,
 )
+from shared.eval_core.tcl_rubric import tcl_content_score, tcl_rubric_markdown
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import selectinload
@@ -152,6 +154,7 @@ async def _run_pipeline(
             .where(Interview.id == interview_id)
             .options(
                 selectinload(Interview.questions).selectinload(Question.answer),
+                selectinload(Interview.company_style),   # 新增
             )
         )
         iv = res.scalar_one_or_none()
@@ -161,6 +164,7 @@ async def _run_pipeline(
         company = iv.company_name
         role = iv.role_title
         language = iv.language
+        rubric_type = (iv.company_style.rubric_type if iv.company_style else "faang")
         questions = sorted(iv.questions, key=lambda q: q.order_index)
 
     # 2. Filter Q/A pairs with actual answers
@@ -184,6 +188,7 @@ async def _run_pipeline(
 
     for q, a in qa_pairs:
         voice_features = await _compute_voice_features(a, interview_id)
+        _rubric_fn = tcl_rubric_markdown if rubric_type == "tcl_l2" else rubric_markdown
         prompt = stage1_prompt(
             question=q.question_text,
             transcript=a.transcript_text,
@@ -191,15 +196,23 @@ async def _run_pipeline(
             company=company,
             role=role,
             language=language,
+            rubric_fn=_rubric_fn,
         )
         parsed, meta = await bedrock_claude.invoke_json(prompt, max_tokens=2000)
 
         # Extract scores
         checkpoints = parsed.get("content_checkpoints", {})
-        c_score = content_score_from_checkpoints(checkpoints)
-        e_score = int(parsed.get("expression_score", 0))
-        v_score = voice_score_from_features(voice_features)
-        o_score = round(c_score * 0.5 + e_score * 0.3 + v_score * 0.2)
+        if rubric_type == "tcl_l2":
+            c_score, e_score, dim_scores = tcl_content_score(checkpoints)
+            v_score = voice_score_from_features(voice_features)
+            o_score = round(c_score * 0.60 + e_score * 0.30 + v_score * 0.10)
+        else:
+            # 原有 FAANG 逻辑，一字不改：
+            c_score = content_score_from_checkpoints(checkpoints)
+            e_score = int(parsed.get("expression_score", 0))
+            v_score = voice_score_from_features(voice_features)
+            o_score = round(c_score * 0.5 + e_score * 0.3 + v_score * 0.2)
+            dim_scores = {}
 
         suggestions = parsed.get("improvement_suggestions", [])
         suggestion_text = "\n".join(f"• {s}" for s in suggestions) if suggestions else ""
@@ -215,6 +228,7 @@ async def _run_pipeline(
             improvement_suggestion=suggestion_text,
             ideal_answer=parsed.get("ideal_answer"),
             voice_features=voice_features,
+            dimension_scores=dim_scores,
             raw_prompt=prompt[:5000],  # truncate to save space
             raw_response=parsed,
             evaluation_cost_usd=meta.get("cost_usd", 0),

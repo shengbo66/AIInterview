@@ -58,6 +58,9 @@ class Interview(Base):
     ended_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
+    company_style: Mapped["CompanyStyle | None"] = relationship(
+        "CompanyStyle", foreign_keys=[company_style_id], lazy="raise"
+    )
     questions: Mapped[list["Question"]] = relationship(
         back_populates="interview", cascade="all, delete-orphan"
     )
