@@ -9,7 +9,8 @@ from app.config import settings
 from app.db import SessionLocal
 from app.logging_config import setup_logging
 from app.routers import audio, company_styles, demo_bidi, health, interviews
-from app.seed.company_styles import seed_if_empty
+from app.seed.company_styles import seed_if_empty as seed_company_styles
+from app.seed.tcl_style import seed_if_empty as seed_tcl
 
 setup_logging()
 
@@ -17,7 +18,8 @@ setup_logging()
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     async with SessionLocal() as session:
-        await seed_if_empty(session)
+        await seed_company_styles(session)
+        await seed_tcl(session)
     yield
 
 
