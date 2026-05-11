@@ -13,8 +13,11 @@ class ValidationError(Exception):
     pass
 
 
-async def list_styles(db: AsyncSession) -> list[CompanyStyle]:
-    res = await db.execute(select(CompanyStyle).order_by(CompanyStyle.created_at.desc()))
+async def list_styles(db: AsyncSession, builtin_only: bool = False) -> list[CompanyStyle]:
+    q = select(CompanyStyle)
+    if builtin_only:
+        q = q.where(CompanyStyle.is_builtin.is_(True))
+    res = await db.execute(q.order_by(CompanyStyle.created_at.desc()))
     return list(res.scalars().all())
 
 
