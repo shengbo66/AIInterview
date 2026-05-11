@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth import verify_token
 from app.config import settings
-from app.db import SessionLocal
+import app.db as _db_module
 from app.logging_config import setup_logging
 from app.routers import audio, company_styles, demo_bidi, health, interviews
 from app.seed.company_styles import seed_if_empty as seed_company_styles
@@ -17,7 +17,7 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    async with SessionLocal() as session:
+    async with _db_module.SessionLocal() as session:
         await seed_company_styles(session)
         await seed_tcl(session)
     yield
