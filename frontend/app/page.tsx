@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { base64FromInt16, int16FromBase64 } from "@/lib/audio-codec";
 import { getAccessToken, ensureValidToken } from "@/lib/auth";
+import { fetchScenarios, type Scenario } from "@/lib/api";
 
 type TranscriptLine = {
   role: "user" | "assistant";
@@ -46,6 +47,23 @@ function fmtTs(ms: number): string {
   return `${hh}:${mm}:${ss}`;
 }
 
+const SCENARIO_META: Record<string, {
+  roleTitle: string;
+  description: string;
+  langs: ("zh" | "en")[];
+}> = {
+  "某公司": {
+    roleTitle: "硬件技术工程师（射频）实习生",
+    description: "ICT BG 无线网络产品线 · 约 45 分钟",
+    langs: ["zh"],
+  },
+  "TCL": {
+    roleTitle: "Embodied AI Architect",
+    description: "TCL EL Shanghai · L2 技术深度面 · 约 45 分钟",
+    langs: ["zh", "en"],
+  },
+};
+
 // --- page ------------------------------------------------------------------
 export default function InterviewDemoPage() {
   const [status, setStatus] = useState<"idle" | "connecting" | "live" | "error">("idle");
@@ -53,6 +71,10 @@ export default function InterviewDemoPage() {
   const [error, setError] = useState<string | null>(null);
   const [aiSpeaking, setAiSpeaking] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
+  const [scenarios, setScenarios] = useState<Scenario[]>([]);
+  const [selectedStyleId, setSelectedStyleId] = useState<string | null>(null);
+  const [selectedLang, setSelectedLang] = useState<"zh" | "en">("zh");
+  const [scenariosLoading, setScenariosLoading] = useState(true);
 
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -169,7 +191,12 @@ export default function InterviewDemoPage() {
       //    the first few PCM chunks while WS handshake is in flight.
       //    Ensure token is fresh before connecting (auto-refresh if expired).
       await ensureValidToken();
-      const ws = new WebSocket(resolveWsUrl());
+      const baseWsUrl = resolveWsUrl();
+      const wsSep = baseWsUrl.includes("?") ? "&" : "?";
+      const wsParams = new URLSearchParams();
+      if (selectedStyleId) wsParams.set("style_id", selectedStyleId);
+      wsParams.set("lang", selectedLang);
+      const ws = new WebSocket(`${baseWsUrl}${wsSep}${wsParams.toString()}`);
       wsRef.current = ws;
 
       // Mic-frame counter for diagnostics: lets us confirm in the browser
@@ -256,6 +283,13 @@ export default function InterviewDemoPage() {
 
   useEffect(() => () => stop(), [stop]);
 
+  useEffect(() => {
+    fetchScenarios()
+      .then(setScenarios)
+      .catch((e) => console.error("Failed to load scenarios:", e))
+      .finally(() => setScenariosLoading(false));
+  }, []);
+
   const live = status === "live" || status === "connecting";
 
   return (
@@ -266,11 +300,69 @@ export default function InterviewDemoPage() {
           某公司 · 硬件技术工程师（射频技术方向）实习生
         </p>
 
+        {status === "idle" && (
+          <div className="space-y-3 mb-4">
+            <p className="text-sm text-neutral-400">请选择面试场景</p>
+            {scenariosLoading ? (
+              <p className="text-xs text-neutral-500">加载中...</p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {scenarios.map((scenario) => {
+                  const meta = SCENARIO_META[scenario.name];
+                  const isSelected = selectedStyleId === scenario.id;
+                  return (
+                    <button
+                      key={scenario.id}
+                      onClick={() => {
+                        setSelectedStyleId(scenario.id);
+                        if (!SCENARIO_META[scenario.name]?.langs.includes(selectedLang)) {
+                          setSelectedLang("zh");
+                        }
+                      }}
+                      className={`text-left p-3 rounded-lg border transition-colors ${
+                        isSelected
+                          ? "border-sky-500 bg-sky-950"
+                          : "border-neutral-700 hover:border-neutral-500"
+                      }`}
+                    >
+                      <div className="text-sm font-medium">{scenario.name}</div>
+                      {meta && (
+                        <>
+                          <div className="text-xs text-neutral-400 mt-0.5">{meta.roleTitle}</div>
+                          <div className="text-xs text-neutral-500 mt-0.5">{meta.description}</div>
+                          {isSelected && meta.langs.length > 1 && (
+                            <div className="flex gap-1 mt-2" onClick={(e) => e.stopPropagation()}>
+                              {meta.langs.map((lang) => (
+                                <button
+                                  key={lang}
+                                  onClick={() => setSelectedLang(lang)}
+                                  className={`text-xs px-2 py-0.5 rounded ${
+                                    selectedLang === lang
+                                      ? "bg-sky-700 text-white"
+                                      : "bg-neutral-800 text-neutral-400 hover:bg-neutral-700"
+                                  }`}
+                                >
+                                  {lang === "zh" ? "中文" : "English"}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex gap-3 mb-4 items-center">
           {!live ? (
             <button
               onClick={start}
-              className="px-5 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 font-medium"
+              disabled={status !== "idle" || selectedStyleId === null}
+              className="px-5 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               开始面试
             </button>
