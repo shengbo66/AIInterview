@@ -28,6 +28,7 @@ class CompanyStyle(Base):
     sample_questions: Mapped[list] = mapped_column(JSON, default=list)
     prompt_context_text: Mapped[str] = mapped_column(Text, default="")
     is_builtin: Mapped[bool] = mapped_column(default=False)
+    rubric_type: Mapped[str] = mapped_column(String(20), default="faang")
     created_by: Mapped[str | None] = mapped_column(String(36), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
@@ -115,6 +116,7 @@ class Evaluation(Base):
     ideal_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
     voice_features: Mapped[dict] = mapped_column(JSON, default=dict)
     rubric_version: Mapped[str] = mapped_column(String(20), default="v1.0")
+    dimension_scores: Mapped[dict] = mapped_column(JSON, default=dict)
     raw_prompt: Mapped[str] = mapped_column(Text, default="")
     raw_response: Mapped[dict] = mapped_column(JSON, default=dict)
     evaluation_cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
