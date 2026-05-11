@@ -4,7 +4,7 @@
 
 **Goal:** 新增 TCL Embodied AI Architect L2 Mock 面试场景，与现有某公司场景并存，包含专属五维评分体系和双语支持。
 
-**Architecture:** 复用现有 `CompanyStyle` 表，新增 `rubric_type` 和 `dimension_scores` 两列（一次 migration）；评分引擎通过 `rubric_type` dispatch 到 TCL 专属 rubric；前端首页新增场景卡片选择 UI，历史详情页按场景条件渲染评分块。
+**Architecture:** 复用现有 `CompanyStyle` 表，新增 `rubric_type` 和 `dimension_scores` 两列（一次 migration）；评分引擎通过 `rubric_type` dispatch 到 TCL 专属 rubric；前端首页新增场景卡片选择 UI，历史详情页按场景条件渲染评分块。**核心原则：现有某公司代码路径零改动**——`BidiInterviewSession` 默认参数保持原有行为，`style_id=None` 时完全走原有逻辑；前端始终传入 `style_id` 以选择 TCL 场景；evaluation_service 的 FAANG 路径代码不修改，只在其前加一层 dispatch 判断。
 
 **Tech Stack:** Python 3.12 / FastAPI / SQLAlchemy 2.0 async / Alembic / SQLite WAL；Next.js 16 / TypeScript；pytest-asyncio；共享库 `shared/eval_core/`。
 
@@ -22,7 +22,7 @@
 - `backend/app/schemas.py` — `CompanyStyleOut` 加 `rubric_type`；`EvaluationOut` 加 `dimension_scores`
 - `backend/app/main.py` — lifespan 加 TCL seed 调用
 - `backend/app/routers/company_styles.py` — 新增 `?builtin=true` filter
-- `backend/app/services/bidi_interview_session.py` — 新增 `company_style_id` / `language` 参数，fallback 改为按 name 查
+- `backend/app/services/bidi_interview_session.py` — 新增 `company_style_id` / `language` 可选参数（默认值保持原有行为），`_load_company_style` 原逻辑不动
 - `backend/app/routers/demo_bidi.py` — 读取 `style_id` / `lang` query params，校验 style_id
 - `shared/eval_core/prompt_template.py` — `stage1_prompt` 加 `rubric_fn` 参数
 - `backend/app/services/evaluation_service.py` — 按 `rubric_type` dispatch，写入 `dimension_scores`
@@ -906,94 +906,78 @@ python -m pytest tests/test_evaluation_service_tcl.py -v 2>&1 | head -20
 
 Expected: 测试运行但失败，因为 evaluation_service 还没有 TCL dispatch 逻辑。
 
-- [ ] **Step 3: 修改 `evaluation_service.py` 实现 TCL dispatch**
+- [ ] **Step 3: 修改 `evaluation_service.py` — 原有 FAANG 路径代码不动，加一层外包 dispatch**
 
-在 `_run_pipeline` 函数中，加载 interview 时同时 eager load `company_style`，并按 `rubric_type` dispatch：
+策略：在 `_run_pipeline` 加载 interview 时多读一个字段 `rubric_type`，其余 FAANG 路径的代码**一行不改**，只在每个计算点前用 `if rubric_type == "tcl_l2"` 分支走 TCL 逻辑。
 
 ```python
 # backend/app/services/evaluation_service.py
-# 新增 import：
+# 文件顶部新增两行 import（在现有 import 之后）：
 from shared.eval_core.tcl_rubric import tcl_rubric_markdown, tcl_content_score
 
-# 修改 _run_pipeline 中的加载逻辑（加 selectinload company_style）：
-from sqlalchemy.orm import selectinload
+# _run_pipeline 中加载 interview 时，额外 eager load company_style 读 rubric_type：
+# （现有 selectinload 行不动，新增一行）
+res = await db.execute(
+    select(Interview)
+    .where(Interview.id == interview_id)
+    .options(
+        selectinload(Interview.questions).selectinload(Question.answer),
+        selectinload(Interview.company_style),   # 新增
+    )
+)
+iv = res.scalar_one_or_none()
+# ... 现有代码不变 ...
+rubric_type = (iv.company_style.rubric_type if iv.company_style else "faang")  # 新增一行
 
-async def _run_pipeline(sf, interview_id):
-    async with sf() as db:
-        res = await db.execute(
-            select(Interview)
-            .where(Interview.id == interview_id)
-            .options(
-                selectinload(Interview.questions).selectinload(Question.answer),
-                selectinload(Interview.company_style),   # 新增：eager load company_style
-            )
-        )
-        iv = res.scalar_one_or_none()
-        if iv is None:
-            logger.error("interview %s not found", interview_id)
-            return
-        company = iv.company_name
-        role = iv.role_title
-        language = iv.language
-        questions = sorted(iv.questions, key=lambda q: q.order_index)
-        # 新增：读取 rubric_type
-        rubric_type = iv.company_style.rubric_type if iv.company_style else "faang"
+# per-question 循环中，在现有 stage1_prompt 调用之前加 rubric_fn 选择：
+# （原有 prompt = stage1_prompt(...) 改为如下，其余循环体不动）
+_rubric_fn = tcl_rubric_markdown if rubric_type == "tcl_l2" else rubric_markdown
+prompt = stage1_prompt(
+    question=q.question_text,
+    transcript=a.transcript_text,
+    voice_features=voice_features,
+    company=company,
+    role=role,
+    language=language,
+    rubric_fn=_rubric_fn,    # 新增参数；FAANG 时等价于原调用
+)
+parsed, meta = await bedrock_claude.invoke_json(prompt, max_tokens=2000)
 
-    # 在 qa_pairs 处理后，per-question 循环中：
-    for q, a in qa_pairs:
-        voice_features = await _compute_voice_features(a, interview_id)
+# 评分计算：TCL 走新逻辑，FAANG 走完全未改动的原有代码：
+checkpoints = parsed.get("content_checkpoints", {})
+if rubric_type == "tcl_l2":
+    # TCL 专属：五维 → 聚合到 content/expression；dim_scores 存入新列
+    c_score, e_score, dim_scores = tcl_content_score(checkpoints)
+    v_score = voice_score_from_features(voice_features)
+    o_score = round(c_score * 0.60 + e_score * 0.30 + v_score * 0.10)
+else:
+    # 原有 FAANG 逻辑，一字不改：
+    c_score = content_score_from_checkpoints(checkpoints)
+    e_score = int(parsed.get("expression_score", 0))
+    v_score = voice_score_from_features(voice_features)
+    o_score = round(c_score * 0.5 + e_score * 0.3 + v_score * 0.2)
+    dim_scores = {}  # 某公司不写维度分
 
-        # dispatch rubric
-        if rubric_type == "tcl_l2":
-            _rubric_fn = tcl_rubric_markdown
-        else:
-            _rubric_fn = rubric_markdown
+suggestions = parsed.get("improvement_suggestions", [])
+suggestion_text = "\n".join(f"• {s}" for s in suggestions) if suggestions else ""
 
-        prompt = stage1_prompt(
-            question=q.question_text,
-            transcript=a.transcript_text,
-            voice_features=voice_features,
-            company=company,
-            role=role,
-            language=language,
-            rubric_fn=_rubric_fn,   # 新增参数
-        )
-        parsed, meta = await bedrock_claude.invoke_json(prompt, max_tokens=2000)
-
-        # dispatch scoring
-        checkpoints = parsed.get("content_checkpoints", {})
-        if rubric_type == "tcl_l2":
-            c_score, e_score, dim_scores = tcl_content_score(checkpoints)
-            # voice score from existing function (TCL weight: 10%)
-            v_score = voice_score_from_features(voice_features)
-            o_score = round(c_score * 0.60 + e_score * 0.30 + v_score * 0.10)
-        else:
-            c_score = content_score_from_checkpoints(checkpoints)
-            e_score = int(parsed.get("expression_score", 0))
-            v_score = voice_score_from_features(voice_features)
-            o_score = round(c_score * 0.5 + e_score * 0.3 + v_score * 0.2)
-            dim_scores = {}
-
-        suggestions = parsed.get("improvement_suggestions", [])
-        suggestion_text = "\n".join(f"• {s}" for s in suggestions) if suggestions else ""
-
-        ev = Evaluation(
-            interview_id=interview_id,
-            question_id=q.id,
-            content_score=c_score,
-            expression_score=e_score,
-            voice_score=v_score,
-            overall_score=o_score,
-            overall_result=overall_result_label(o_score),
-            improvement_suggestion=suggestion_text,
-            ideal_answer=parsed.get("ideal_answer"),
-            voice_features=voice_features,
-            dimension_scores=dim_scores,   # 新增
-            raw_prompt=prompt[:5000],
-            raw_response=parsed,
-            evaluation_cost_usd=meta.get("cost_usd", 0),
-        )
-        # ... rest unchanged
+ev = Evaluation(
+    interview_id=interview_id,
+    question_id=q.id,
+    content_score=c_score,
+    expression_score=e_score,
+    voice_score=v_score,
+    overall_score=o_score,
+    overall_result=overall_result_label(o_score),
+    improvement_suggestion=suggestion_text,
+    ideal_answer=parsed.get("ideal_answer"),
+    voice_features=voice_features,
+    dimension_scores=dim_scores,   # 新增列；FAANG 时为 {}
+    raw_prompt=prompt[:5000],
+    raw_response=parsed,
+    evaluation_cost_usd=meta.get("cost_usd", 0),
+)
+# ... 其余代码完全不变
 ```
 
 - [ ] **Step 4: 运行所有 evaluation 测试**
@@ -1074,20 +1058,20 @@ async def test_setup_with_style_id_loads_tcl(db_with_both_styles, mock_s3_upload
 
 
 @pytest.mark.asyncio
-async def test_setup_fallback_loads_huawei(db_with_both_styles, mock_s3_upload):
-    """style_id=None should fallback to 某公司 (by name)."""
+async def test_setup_fallback_uses_first_builtin(db_with_both_styles, mock_s3_upload):
+    """style_id=None uses original logic: first builtin CompanyStyle (某公司 seeded first)."""
     session = BidiInterviewSession(
         db_with_both_styles,
         role_title="RF Intern",
-        company_style_id=None,
-        language="zh",
+        # company_style_id not passed — original behavior
     )
     await session.setup()
 
     async with db_with_both_styles() as s:
         iv = await s.get(Interview, session.interview_id)
+    # 原有逻辑：取第一条 builtin，fixture 先插入某公司
     assert iv.company_name == "某公司"
-    assert iv.language == "zh"
+    assert iv.language == "zh"  # 默认值
 
 
 @pytest.mark.asyncio
@@ -1130,68 +1114,67 @@ python -m pytest tests/test_bidi_session_tcl.py -v 2>&1 | head -20
 
 Expected: `TypeError: BidiInterviewSession.__init__() got unexpected keyword argument 'company_style_id'`
 
-- [ ] **Step 3: 修改 `bidi_interview_session.py`**
+- [ ] **Step 3: 修改 `bidi_interview_session.py` — 仅加可选参数，原有逻辑不动**
 
 ```python
 # backend/app/services/bidi_interview_session.py
 
-# 修改 __init__ 签名：
+# 修改 __init__ 签名，新增两个有默认值的可选参数：
 def __init__(
     self,
     session_factory: async_sessionmaker[AsyncSession],
     role_title: str,
     s3_prefix: str = "interviews",
-    company_style_id: str | None = None,   # 新增
-    language: str = "zh",                  # 新增
+    company_style_id: str | None = None,   # 新增：None = 走原有逻辑
+    language: str = "zh",                  # 新增：默认中文，与原有行为一致
 ) -> None:
     self._sf = session_factory
     self._role_title = role_title
     self._s3_prefix = s3_prefix
     self._company_style_id = company_style_id   # 新增
     self._language = language                   # 新增
-    # ... rest of __init__ unchanged
+    # ... 以下 __init__ 其余内容完全不变
 
-# 修改 setup() 中的 Interview 创建：
+# 修改 setup() 中的 Interview 创建，language 改为用 self._language：
 iv = Interview(
     company_name=cs.name,
     company_style_id=cs.id,
     role_title=self._role_title,
-    language=self._language,    # 使用传入的 language
+    language=self._language,    # 原来是硬编码 "zh"，改为参数（默认值等价）
     mode="strict",
     status="in_progress",
     bidi_started_at=datetime.utcnow(),
     started_at=datetime.utcnow(),
 )
 
-# 修改 setup() 调用 _load_company_style：
-cs = await self._load_company_style(db)
-
-# 修改 _load_company_style：
+# _load_company_style 原有逻辑保持不变，仅在其前加 company_style_id 分支：
 async def _load_company_style(self, db: AsyncSession) -> CompanyStyle:
+    # 新增：如果指定了 style_id，按 id 查（TCL 场景走此路径）
     if self._company_style_id is not None:
         cs = await db.get(CompanyStyle, self._company_style_id)
         if cs is None:
             raise RuntimeError(f"CompanyStyle id={self._company_style_id} not found")
         return cs
-    # fallback: load by name="某公司"
+    # 原有逻辑完全不动：取第一条 builtin
     res = await db.execute(
-        select(CompanyStyle).where(CompanyStyle.name == "某公司").limit(1)
+        select(CompanyStyle).where(CompanyStyle.is_builtin.is_(True)).limit(1)
     )
     cs = res.scalar_one_or_none()
     if cs is None:
-        raise RuntimeError("Default CompanyStyle '某公司' not seeded; run seed first")
+        raise RuntimeError("No builtin CompanyStyle seeded; run seed first")
     return cs
 ```
 
-修改 `compose_system_prompt` 加 `language` 参数：
+修改 `compose_system_prompt` 加 `language` 参数（原有中文 prompt 模板不动）：
 
 ```python
 def compose_system_prompt(company_style: CompanyStyle, role_title: str, language: str = "zh") -> str:
-    """Compose system prompt. language='en' produces English prompt for TCL."""
+    """原有中文逻辑不变；language='en' 时走英文 prompt（TCL 英文面试专用）。"""
     base = (company_style.prompt_context_text or "").strip()
     sample = "\n".join(f"- {q}" for q in (company_style.sample_questions or [])[:6])
 
     if language == "en":
+        # 仅 TCL 英文面试走此分支，不影响原有中文路径
         return (
             f"You are a {company_style.name} interviewer conducting an L2 technical interview "
             f"for the \"{role_title}\" role.\n\n"
@@ -1206,6 +1189,7 @@ def compose_system_prompt(company_style: CompanyStyle, role_title: str, language
             "- After closing, do not ask further questions.\n"
         )
 
+    # 原有中文 prompt 模板，一字不改：
     return (
         f"你是 {company_style.name} 面试官，正在面试一位应聘 \"{role_title}\" 的候选人。\n\n"
         f"{base}\n\n"
