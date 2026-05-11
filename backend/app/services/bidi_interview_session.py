@@ -63,10 +63,33 @@ class _TurnBuffer:
         return data, duration_sec
 
 
-def compose_system_prompt(company_style: CompanyStyle, role_title: str) -> str:
-    """Prefer CompanyStyle.prompt_context_text; fall back to inline defaults."""
+def compose_system_prompt(company_style: CompanyStyle, role_title: str, language: str = "zh") -> str:
+    """Prefer CompanyStyle.prompt_context_text; fall back to inline defaults.
+
+    Args:
+        company_style: The CompanyStyle to use for the interview.
+        role_title: The job role being interviewed for.
+        language: Interview language — "zh" (default) for Chinese, "en" for English.
+    """
     base = (company_style.prompt_context_text or "").strip()
     sample = "\n".join(f"- {q}" for q in (company_style.sample_questions or [])[:6])
+
+    if language == "en":
+        return (
+            f"You are a {company_style.name} interviewer conducting a technical interview "
+            f"for the \"{role_title}\" role.\n\n"
+            f"{base}\n\n"
+            "Sample questions for reference:\n"
+            f"{sample}\n\n"
+            "Interview rules:\n"
+            "- Introduce yourself briefly, then ask the first question directly.\n"
+            "- Ask one question at a time; wait for a complete answer before continuing.\n"
+            "- Keep responses concise and professional (max 2 sentences).\n"
+            "- Finish the interview within 45 minutes (6-8 questions), then close politely.\n"
+            "- After closing, do not ask further questions.\n"
+        )
+
+    # Original Chinese template — unchanged.
     return (
         f"你是 {company_style.name} 面试官，正在面试一位应聘 \"{role_title}\" 的候选人。\n\n"
         f"{base}\n\n"
@@ -99,11 +122,13 @@ class BidiInterviewSession:
         role_title: str,
         s3_prefix: str = "interviews",
         company_style_id: str | None = None,
+        language: str = "zh",
     ) -> None:
         self._sf = session_factory
         self._role_title = role_title
         self._s3_prefix = s3_prefix
         self._requested_company_style_id = company_style_id
+        self._language = language
         self._ai_buf = _TurnBuffer()
         self._user_buf = _TurnBuffer()
         self._interview_id: str | None = None
@@ -146,13 +171,13 @@ class BidiInterviewSession:
         async with self._sf() as db:
             cs = await self._load_company_style(db)
             self._company_style_id = cs.id
-            self._system_prompt = compose_system_prompt(cs, self._role_title)
+            self._system_prompt = compose_system_prompt(cs, self._role_title, self._language)
 
             iv = Interview(
                 company_name=cs.name,
                 company_style_id=cs.id,
                 role_title=self._role_title,
-                language="zh",
+                language=self._language,
                 mode="strict",
                 status="in_progress",
                 bidi_started_at=datetime.utcnow(),
@@ -165,14 +190,14 @@ class BidiInterviewSession:
             logger.info("session setup: interview_id=%s company=%s", iv.id, cs.name)
 
     async def _load_company_style(self, db: AsyncSession) -> CompanyStyle:
-        if self._requested_company_style_id:
+        if self._requested_company_style_id is not None:
             cs = await db.get(CompanyStyle, self._requested_company_style_id)
-            if cs is not None:
-                return cs
-            logger.warning(
-                "company_style_id=%s not found; falling back to default builtin",
-                self._requested_company_style_id,
-            )
+            if cs is None:
+                raise RuntimeError(
+                    f"CompanyStyle id={self._requested_company_style_id!r} not found"
+                )
+            return cs
+        # Original fallback: first builtin CompanyStyle.
         res = await db.execute(
             select(CompanyStyle).where(CompanyStyle.is_builtin.is_(True)).limit(1)
         )
