@@ -31,6 +31,35 @@ function ScoreBadge({ score, label }: { score: number | null; label: string }) {
   );
 }
 
+function DimensionBar({ score, label }: { score: number; label: string }) {
+  const color =
+    score >= 80 ? "bg-emerald-500" : score >= 60 ? "bg-yellow-500" : "bg-red-500";
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-neutral-400 w-16 shrink-0">{label}</span>
+      <div className="flex-1 bg-neutral-800 rounded-full h-1.5">
+        <div
+          className={`${color} h-1.5 rounded-full`}
+          style={{ width: `${score}%` }}
+        />
+      </div>
+      <span className="text-xs text-neutral-300 w-8 text-right">{score}</span>
+    </div>
+  );
+}
+
+function TclDimensionBlock({ scores }: { scores: NonNullable<EvaluationOut["dimension_scores"]> }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-neutral-500 font-medium">TCL 五维评分</p>
+      <DimensionBar score={scores.tech_depth ?? 0}   label="技术深度" />
+      <DimensionBar score={scores.architecture ?? 0} label="系统架构" />
+      <DimensionBar score={scores.competency ?? 0}   label="能力素质" />
+      <DimensionBar score={scores.culture ?? 0}      label="文化契合" />
+    </div>
+  );
+}
+
 function PlayButton({
   interviewId,
   questionId,
@@ -168,6 +197,10 @@ export default function InterviewDetailPage() {
             <ScoreBadge score={overallEval.expression_score} label="表达" />
             <ScoreBadge score={overallEval.voice_score} label="语音" />
           </div>
+          {data.company_name === "TCL" && overallEval.dimension_scores &&
+            Object.keys(overallEval.dimension_scores).length > 0 && (
+            <TclDimensionBlock scores={overallEval.dimension_scores} />
+          )}
           {overallEval.overall_result && (
             <p className="text-sm text-neutral-300">{overallEval.overall_result}</p>
           )}
@@ -238,6 +271,12 @@ export default function InterviewDetailPage() {
                         语音 <span className="text-neutral-300">{ev.voice_score}</span>
                       </span>
                     </div>
+                    {data.company_name === "TCL" && ev.dimension_scores &&
+                      Object.keys(ev.dimension_scores).length > 0 && (
+                      <div className="mt-1">
+                        <TclDimensionBlock scores={ev.dimension_scores} />
+                      </div>
+                    )}
                     {ev.voice_features && (ev.voice_features.duration_total_sec ?? 0) > 0 ? (
                       <div className="text-xs text-neutral-500 space-y-0.5">
                         <div>
