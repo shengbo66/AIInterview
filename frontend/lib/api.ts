@@ -18,6 +18,13 @@ async function authedFetch(url: string, init?: RequestInit): Promise<Response> {
   return fetch(url, { ...init, headers });
 }
 
+export interface Scenario {
+  id: string;
+  name: string;
+  rubric_type: string;
+  is_builtin: boolean;
+}
+
 export interface InterviewSummary {
   id: string;
   company_name: string;
@@ -75,6 +82,12 @@ export interface EvaluationOut {
     sentiment_overall?: string;
     sentiment_scores?: { positive?: number; negative?: number; neutral?: number; mixed?: number };
   };
+  dimension_scores?: {
+    tech_depth?: number;
+    architecture?: number;
+    competency?: number;
+    culture?: number;
+  };
 }
 
 export interface InterviewDetail {
@@ -89,6 +102,12 @@ export interface InterviewDetail {
   created_at: string;
   questions: QuestionOut[];
   evaluations: EvaluationOut[];
+}
+
+export async function fetchScenarios(): Promise<Scenario[]> {
+  const res = await authedFetch(`${API_BASE}/api/company-styles?builtin=true`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Failed to fetch scenarios: ${res.status}`);
+  return res.json();
 }
 
 export async function fetchInterviews(): Promise<InterviewSummary[]> {
