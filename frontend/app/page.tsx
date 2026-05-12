@@ -263,7 +263,7 @@ export default function InterviewDemoPage() {
       setError(msg);
       setStatus("error");
     }
-  }, [handleServerMessage]);
+  }, [handleServerMessage, selectedStyleId, selectedLang]);
 
   const stop = useCallback(() => {
     wsRef.current?.close();
