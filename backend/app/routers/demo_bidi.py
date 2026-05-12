@@ -48,8 +48,14 @@ logger = logging.getLogger("interviewer.demo_bidi")
 
 router = APIRouter(tags=["demo"])
 
-# Locked for Sprint 2 — only this role, only company style (seeded in unit-1).
+# Default role title for fallback (某公司 RF Intern).
 ROLE_TITLE = "硬件技术工程师（射频技术方向）实习生"
+
+# Maps CompanyStyle.name → role title shown in the system prompt.
+_COMPANY_ROLE_TITLES: dict[str, str] = {
+    "某公司": "硬件技术工程师（射频技术方向）实习生",
+    "TCL": "Embodied AI Architect",
+}
 
 # Bootstrap audio path (relative to backend/)
 _HELLO_PCM_PATH = Path(__file__).resolve().parent.parent.parent / "assets" / "hello.pcm"
@@ -132,7 +138,8 @@ async def interview_demo(websocket: WebSocket) -> None:
     if lang not in ("zh", "en"):
         lang = "zh"
 
-    # If style_id is provided, validate it exists in DB
+    # If style_id is provided, validate it exists in DB and resolve role title.
+    role_title = ROLE_TITLE
     if style_id is not None:
         async with SessionLocal() as db:
             from app.models import CompanyStyle as _CS
@@ -141,13 +148,14 @@ async def interview_demo(websocket: WebSocket) -> None:
                 logger.warning("WS invalid style_id=%s", style_id)
                 await websocket.close(code=4008, reason="invalid style_id")
                 return
+            role_title = _COMPANY_ROLE_TITLES.get(cs_check.name, ROLE_TITLE)
 
     await websocket.accept()
     logger.info("WS demo connected at %s", datetime.now().isoformat())
 
     session = BidiInterviewSession(
         SessionLocal,
-        role_title=ROLE_TITLE,
+        role_title=role_title,
         company_style_id=style_id,
         language=lang,
     )
