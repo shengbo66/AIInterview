@@ -48,12 +48,12 @@ logger = logging.getLogger("interviewer.demo_bidi")
 
 router = APIRouter(tags=["demo"])
 
-# Default role title for fallback (某公司 RF Intern).
+# Default role title for fallback (H公司 RF Intern).
 ROLE_TITLE = "硬件技术工程师（射频技术方向）实习生"
 
 # Maps CompanyStyle.name → role title shown in the system prompt.
 _COMPANY_ROLE_TITLES: dict[str, str] = {
-    "某公司": "硬件技术工程师（射频技术方向）实习生",
+    "H公司": "硬件技术工程师（射频技术方向）实习生",
     "TCL": "Embodied AI Architect",
 }
 

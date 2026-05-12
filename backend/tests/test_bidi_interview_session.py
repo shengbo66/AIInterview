@@ -19,12 +19,12 @@ from app.services.bidi_interview_session import (
 
 def test_compose_system_prompt_uses_style_text():
     cs = CompanyStyle(
-        name="某公司",
+        name="H公司",
         prompt_context_text="四大维度：A、B、C、D。",
         sample_questions=["Q1", "Q2", "Q3"],
     )
     prompt = compose_system_prompt(cs, role_title="射频实习生")
-    assert "某公司" in prompt
+    assert "H公司" in prompt
     assert "射频实习生" in prompt
     assert "四大维度：A、B、C、D。" in prompt
     assert "Q1" in prompt and "Q2" in prompt
@@ -46,13 +46,13 @@ async def test_setup_creates_interview_row(db_with_company):
     await session.setup()
 
     assert session.interview_id is not None
-    assert "某公司" in session.system_prompt
+    assert "H公司" in session.system_prompt
     assert "RF Intern" in session.system_prompt
 
     async with db_with_company() as db:
         iv = await db.get(Interview, session.interview_id)
         assert iv is not None
-        assert iv.company_name == "某公司"
+        assert iv.company_name == "H公司"
         assert iv.role_title == "RF Intern"
         assert iv.status == "in_progress"
         assert iv.bidi_started_at is not None

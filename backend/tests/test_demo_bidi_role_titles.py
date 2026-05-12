@@ -8,8 +8,8 @@ def test_tcl_maps_to_embodied_ai_architect():
 
 
 def test_company_maps_to_rf_intern():
-    assert "某公司" in _COMPANY_ROLE_TITLES
-    assert _COMPANY_ROLE_TITLES["某公司"] == ROLE_TITLE
+    assert "H公司" in _COMPANY_ROLE_TITLES
+    assert _COMPANY_ROLE_TITLES["H公司"] == ROLE_TITLE
 
 
 def test_unknown_company_falls_back_to_role_title():

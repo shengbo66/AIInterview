@@ -53,7 +53,7 @@ const SCENARIO_META: Record<string, {
   description: string;
   langs: ("zh" | "en")[];
 }> = {
-  "某公司": {
+  "H公司": {
     roleTitle: "硬件技术工程师（射频）实习生",
     description: "ICT BG 无线网络产品线 · 约 45 分钟",
     langs: ["zh"],

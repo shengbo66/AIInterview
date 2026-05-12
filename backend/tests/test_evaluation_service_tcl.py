@@ -116,7 +116,7 @@ async def test_tcl_pipeline_writes_dimension_scores(db_with_tcl, mock_s3_upload)
 
 @pytest.mark.asyncio
 async def test_faang_pipeline_dimension_scores_empty(db_with_company, mock_s3_upload):
-    """某公司 pipeline: dimension_scores must be empty dict."""
+    """H公司 pipeline: dimension_scores must be empty dict."""
     session = BidiInterviewSession(db_with_company, role_title="RF")
     await session.setup()
     await session.on_event({

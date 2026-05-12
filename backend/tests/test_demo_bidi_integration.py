@@ -104,11 +104,11 @@ async def _company_in_mem_db(monkeypatch, tmp_path):
     async with SF() as s:
         s.add(
             CompanyStyle(
-                name="某公司",
+                name="H公司",
                 interviewer_style_tags=["结构化"],
                 preferred_question_types=["技术深度"],
                 sample_questions=["介绍射频项目"],
-                prompt_context_text="某公司面试维度",
+                prompt_context_text="H公司面试维度",
                 is_builtin=True,
             )
         )
@@ -275,7 +275,7 @@ async def test_full_conversation_two_qa_persists_and_forwards(
         )
         iv = await db.get(Interview, interview_id)
         assert iv is not None, "interview row missing"
-        assert iv.company_name == "某公司"
+        assert iv.company_name == "H公司"
         assert iv.status == "completed", f"status is {iv.status}"
         assert iv.bidi_tokens_total == 1300
         assert iv.bidi_ended_at is not None
@@ -776,7 +776,7 @@ async def test_tcl_style_id_sets_correct_company_and_role(
 async def test_no_style_id_falls_back_to_default_company(
     _company_in_mem_db, _patch_s3, _patch_agent, _patch_eval
 ) -> None:
-    """No style_id must fall back to 某公司 with the original RF Intern role title."""
+    """No style_id must fall back to H公司 with the original RF Intern role title."""
     SF = _company_in_mem_db
 
     script = [
@@ -802,6 +802,6 @@ async def test_no_style_id_falls_back_to_default_company(
         iv = await s.get(Interview, interview_id)
 
     assert iv is not None
-    assert iv.company_name == "某公司", f"expected 某公司, got {iv.company_name}"
+    assert iv.company_name == "H公司", f"expected H公司, got {iv.company_name}"
     assert iv.role_title == "硬件技术工程师（射频技术方向）实习生", f"got {iv.role_title}"
     assert iv.language == "zh"

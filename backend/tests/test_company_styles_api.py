@@ -11,7 +11,7 @@ async def test_list_builtin_only(client: AsyncClient, session_factory):
     # Seed both builtin and custom styles
     async with session_factory() as s:
         s.add(CompanyStyle(
-            name="某公司", rubric_type="faang", is_builtin=True,
+            name="H公司", rubric_type="faang", is_builtin=True,
             interviewer_style_tags=[], preferred_question_types=[],
             sample_questions=[], prompt_context_text="ctx",
         ))
@@ -32,7 +32,7 @@ async def test_list_builtin_only(client: AsyncClient, session_factory):
     data = resp.json()
     assert all(s["is_builtin"] for s in data), "All returned styles should be builtin"
     names = [s["name"] for s in data]
-    assert "某公司" in names
+    assert "H公司" in names
     assert "TCL" in names
     assert "自定义公司" not in names
 
@@ -43,7 +43,7 @@ async def test_list_all_without_filter(client: AsyncClient, session_factory):
     # Seed both builtin and custom styles
     async with session_factory() as s:
         s.add(CompanyStyle(
-            name="某公司", rubric_type="faang", is_builtin=True,
+            name="H公司", rubric_type="faang", is_builtin=True,
             interviewer_style_tags=[], preferred_question_types=[],
             sample_questions=[], prompt_context_text="ctx",
         ))
@@ -58,7 +58,7 @@ async def test_list_all_without_filter(client: AsyncClient, session_factory):
     assert resp.status_code == 200
     data = resp.json()
     names = [s["name"] for s in data]
-    assert "某公司" in names
+    assert "H公司" in names
     assert "自定义公司" in names
 
 
@@ -68,7 +68,7 @@ async def test_response_includes_rubric_type(client: AsyncClient, session_factor
     # Seed test data
     async with session_factory() as s:
         s.add(CompanyStyle(
-            name="某公司", rubric_type="faang", is_builtin=True,
+            name="H公司", rubric_type="faang", is_builtin=True,
             interviewer_style_tags=[], preferred_question_types=[],
             sample_questions=[], prompt_context_text="ctx",
         ))
@@ -86,16 +86,16 @@ async def test_response_includes_rubric_type(client: AsyncClient, session_factor
 
     # Verify correct values
     items_by_name = {s["name"]: s for s in resp.json()}
-    assert items_by_name["某公司"]["rubric_type"] == "faang"
+    assert items_by_name["H公司"]["rubric_type"] == "faang"
     assert items_by_name["TCL"]["rubric_type"] == "tcl_l2"
 
 
 @pytest.mark.asyncio
 async def test_faang_rubric_type_is_faang(client: AsyncClient, session_factory):
-    """某公司 must have rubric_type=faang."""
+    """H公司 must have rubric_type=faang."""
     async with session_factory() as s:
         s.add(CompanyStyle(
-            name="某公司", rubric_type="faang", is_builtin=True,
+            name="H公司", rubric_type="faang", is_builtin=True,
             interviewer_style_tags=[], preferred_question_types=[],
             sample_questions=[], prompt_context_text="ctx",
         ))
@@ -103,7 +103,7 @@ async def test_faang_rubric_type_is_faang(client: AsyncClient, session_factory):
 
     resp = await client.get("/api/company-styles?builtin=true")
     assert resp.status_code == 200
-    company = next(s for s in resp.json() if s["name"] == "某公司")
+    company = next(s for s in resp.json() if s["name"] == "H公司")
     assert company["rubric_type"] == "faang"
 
 

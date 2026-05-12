@@ -7,7 +7,7 @@ from app.services import record_service
 
 async def _make_interview_with_audio(db):
     iv = await record_service.create_interview(
-        db, company_name="某公司", role_title="RF Intern", language="zh"
+        db, company_name="H公司", role_title="RF Intern", language="zh"
     )
     q = Question(
         interview_id=iv.id, order_index=0, question_text="q1",
@@ -25,11 +25,11 @@ async def _make_interview_with_audio(db):
 
 async def test_create_and_get(db):
     iv = await record_service.create_interview(
-        db, company_name="某公司", role_title="RF Intern"
+        db, company_name="H公司", role_title="RF Intern"
     )
     fetched = await record_service.get_interview(db, iv.id)
     assert fetched.id == iv.id
-    assert fetched.company_name == "某公司"
+    assert fetched.company_name == "H公司"
 
 
 async def test_get_not_found(db):

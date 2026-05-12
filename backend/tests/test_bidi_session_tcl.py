@@ -10,9 +10,9 @@ from app.services.bidi_interview_session import BidiInterviewSession
 async def db_with_both_styles(session_factory):
     async with session_factory() as s:
         s.add(CompanyStyle(
-            name="某公司", rubric_type="faang", is_builtin=True,
+            name="H公司", rubric_type="faang", is_builtin=True,
             interviewer_style_tags=[], preferred_question_types=[],
-            sample_questions=[], prompt_context_text="某公司上下文",
+            sample_questions=[], prompt_context_text="H公司上下文",
         ))
         s.add(CompanyStyle(
             name="TCL", rubric_type="tcl_l2", is_builtin=True,
@@ -58,7 +58,7 @@ async def test_setup_fallback_uses_first_builtin(db_with_both_styles, mock_s3_up
 
     async with db_with_both_styles() as s:
         iv = await s.get(Interview, session.interview_id)
-    assert iv.company_name == "某公司"
+    assert iv.company_name == "H公司"
     assert iv.language == "zh"
 
 
@@ -145,14 +145,14 @@ async def test_system_prompt_en_contains_english_rules(db_with_both_styles, mock
 
 @pytest.mark.asyncio
 async def test_company_style_zh_prompt_unchanged(db_with_both_styles, mock_s3_upload):
-    """某公司 zh prompt must use original Chinese template (regression guard)."""
+    """H公司 zh prompt must use original Chinese template (regression guard)."""
     session = BidiInterviewSession(
         db_with_both_styles,
         role_title="硬件技术工程师",
-        # no company_style_id — fallback to 某公司
+        # no company_style_id — fallback to H公司
     )
     await session.setup()
     prompt = session.system_prompt
-    assert "某公司 面试官" in prompt
+    assert "H公司 面试官" in prompt
     assert "硬件技术工程师" in prompt
     assert "每次只问一个问题" in prompt

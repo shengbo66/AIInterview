@@ -46,12 +46,12 @@ async def test_interview_crud_flow(client):
     # create
     r = await client.post(
         "/api/interviews",
-        json={"company_name": "某公司", "role_title": "RF Intern", "language": "zh"},
+        json={"company_name": "H公司", "role_title": "RF Intern", "language": "zh"},
     )
     assert r.status_code == 201, r.text
     iv = r.json()
     iid = iv["id"]
-    assert iv["company_name"] == "某公司"
+    assert iv["company_name"] == "H公司"
     assert iv["status"] == "in_progress"
 
     # list
