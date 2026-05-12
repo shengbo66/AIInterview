@@ -293,7 +293,14 @@ export default function InterviewDemoPage() {
       <div className="max-w-2xl w-full">
         <h1 className="text-2xl font-semibold mb-1">AI 模拟面试</h1>
         <p className="text-neutral-400 text-sm mb-6">
-          某公司 · 硬件技术工程师（射频技术方向）实习生
+          {(() => {
+            const selected = scenarios.find((s) => s.id === selectedStyleId);
+            if (!selected) return "请选择面试场景后开始";
+            const meta = SCENARIO_META[selected.name];
+            return meta
+              ? `${selected.name} · ${meta.roleTitle}`
+              : selected.name;
+          })()}
         </p>
 
         {status === "idle" && (
