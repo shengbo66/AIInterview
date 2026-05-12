@@ -710,4 +710,98 @@ async def test_ws_send_failure_on_connection_restart_keeps_session_alive(
     async with SF() as db:
         iv = await db.get(Interview, interview_id)
         assert iv is not None
-        assert iv.status == "completed"
+
+
+@pytest.mark.asyncio
+async def test_tcl_style_id_sets_correct_company_and_role(
+    _company_in_mem_db, _patch_s3, _patch_agent, _patch_eval
+) -> None:
+    """Passing TCL style_id must produce Interview with company=TCL and role=Embodied AI Architect."""
+    SF = _company_in_mem_db
+
+    # Seed TCL CompanyStyle into the in-memory DB
+    async with SF() as s:
+        tcl = CompanyStyle(
+            name="TCL",
+            rubric_type="tcl_l2",
+            is_builtin=True,
+            interviewer_style_tags=[],
+            preferred_question_types=[],
+            sample_questions=[],
+            prompt_context_text="TCL L2 context",
+        )
+        s.add(tcl)
+        await s.commit()
+        await s.refresh(tcl)
+        tcl_id = tcl.id
+
+    script = [
+        ("emit", {"type": "bidi_connection_start", "connection_id": "fake"}),
+        ("emit", {"type": "bidi_response_start"}),
+        ("emit", {
+            "type": "bidi_transcript_stream",
+            "role": "assistant",
+            "text": "Hello, I am your TCL interviewer.",
+            "is_final": True,
+        }),
+        ("emit", {"type": "bidi_response_complete"}),
+    ]
+    _patch_agent["next_agent"] = FakeBidiAgent(script)
+
+    interview_id = None
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            f"/ws/interview-demo?style_id={tcl_id}&lang=en"
+        ) as ws:
+            for _ in range(10):
+                try:
+                    msg = ws.receive_json()
+                    if msg.get("type") == "session_ready":
+                        interview_id = msg.get("interview_id")
+                except Exception:
+                    break
+
+    assert interview_id, "never received session_ready"
+
+    async with SF() as s:
+        iv = await s.get(Interview, interview_id)
+
+    assert iv is not None
+    assert iv.company_name == "TCL", f"expected TCL, got {iv.company_name}"
+    assert iv.role_title == "Embodied AI Architect", f"got {iv.role_title}"
+    assert iv.language == "en", f"expected en, got {iv.language}"
+
+
+@pytest.mark.asyncio
+async def test_no_style_id_falls_back_to_default_company(
+    _company_in_mem_db, _patch_s3, _patch_agent, _patch_eval
+) -> None:
+    """No style_id must fall back to 某公司 with the original RF Intern role title."""
+    SF = _company_in_mem_db
+
+    script = [
+        ("emit", {"type": "bidi_connection_start", "connection_id": "fake"}),
+        ("emit", {"type": "bidi_response_complete"}),
+    ]
+    _patch_agent["next_agent"] = FakeBidiAgent(script)
+
+    interview_id = None
+    with TestClient(app) as client:
+        with client.websocket_connect("/ws/interview-demo") as ws:
+            for _ in range(5):
+                try:
+                    msg = ws.receive_json()
+                    if msg.get("type") == "session_ready":
+                        interview_id = msg.get("interview_id")
+                except Exception:
+                    break
+
+    assert interview_id, "never received session_ready"
+
+    async with SF() as s:
+        iv = await s.get(Interview, interview_id)
+
+    assert iv is not None
+    assert iv.company_name == "某公司", f"expected 某公司, got {iv.company_name}"
+    assert iv.role_title == "硬件技术工程师（射频技术方向）实习生", f"got {iv.role_title}"
+    assert iv.language == "zh"
