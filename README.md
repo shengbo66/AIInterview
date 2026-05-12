@@ -4,9 +4,6 @@ AI 语音模拟面试平台 — **某公司 · 硬件技术工程师（射频技
 
 基于 Amazon Nova Sonic 双向语音流 + Claude 文本评估 + Transcribe 语音分析 + Comprehend 情感分析。
 
-**Demo**: https://d1hlahtkv3v1q6.cloudfront.net  
-**Demo 账号**: `demo@interviewer.test` / `Interview2026!`
-
 ---
 
 ## 功能概览
