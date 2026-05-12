@@ -93,3 +93,66 @@ async def test_system_prompt_language_en(db_with_both_styles, mock_s3_upload):
     await session.setup()
     prompt = session.system_prompt
     assert "You are" in prompt or "interviewer" in prompt.lower()
+
+
+@pytest.mark.asyncio
+async def test_system_prompt_zh_contains_chinese_rules(db_with_both_styles, mock_s3_upload):
+    """language='zh' system prompt must contain Chinese interview rules and role title."""
+    from sqlalchemy import select
+    async with db_with_both_styles() as s:
+        cs = (await s.execute(
+            select(CompanyStyle).where(CompanyStyle.name == "TCL")
+        )).scalar_one()
+        tcl_id = cs.id
+
+    session = BidiInterviewSession(
+        db_with_both_styles,
+        role_title="Embodied AI Architect",
+        company_style_id=tcl_id,
+        language="zh",
+    )
+    await session.setup()
+    prompt = session.system_prompt
+    assert "TCL 面试官" in prompt
+    assert "Embodied AI Architect" in prompt
+    assert "每次只问一个问题" in prompt
+    assert "You are" not in prompt  # must not mix in English template
+
+
+@pytest.mark.asyncio
+async def test_system_prompt_en_contains_english_rules(db_with_both_styles, mock_s3_upload):
+    """language='en' system prompt must contain English interview rules."""
+    from sqlalchemy import select
+    async with db_with_both_styles() as s:
+        cs = (await s.execute(
+            select(CompanyStyle).where(CompanyStyle.name == "TCL")
+        )).scalar_one()
+        tcl_id = cs.id
+
+    session = BidiInterviewSession(
+        db_with_both_styles,
+        role_title="Embodied AI Architect",
+        company_style_id=tcl_id,
+        language="en",
+    )
+    await session.setup()
+    prompt = session.system_prompt
+    assert "You are" in prompt
+    assert "Embodied AI Architect" in prompt
+    assert "Ask one question at a time" in prompt
+    assert "每次只问一个问题" not in prompt  # must not mix in Chinese template
+
+
+@pytest.mark.asyncio
+async def test_company_style_zh_prompt_unchanged(db_with_both_styles, mock_s3_upload):
+    """某公司 zh prompt must use original Chinese template (regression guard)."""
+    session = BidiInterviewSession(
+        db_with_both_styles,
+        role_title="硬件技术工程师",
+        # no company_style_id — fallback to 某公司
+    )
+    await session.setup()
+    prompt = session.system_prompt
+    assert "某公司 面试官" in prompt
+    assert "硬件技术工程师" in prompt
+    assert "每次只问一个问题" in prompt

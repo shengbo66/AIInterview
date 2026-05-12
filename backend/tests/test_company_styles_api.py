@@ -88,3 +88,37 @@ async def test_response_includes_rubric_type(client: AsyncClient, session_factor
     items_by_name = {s["name"]: s for s in resp.json()}
     assert items_by_name["某公司"]["rubric_type"] == "faang"
     assert items_by_name["TCL"]["rubric_type"] == "tcl_l2"
+
+
+@pytest.mark.asyncio
+async def test_faang_rubric_type_is_faang(client: AsyncClient, session_factory):
+    """某公司 must have rubric_type=faang."""
+    async with session_factory() as s:
+        s.add(CompanyStyle(
+            name="某公司", rubric_type="faang", is_builtin=True,
+            interviewer_style_tags=[], preferred_question_types=[],
+            sample_questions=[], prompt_context_text="ctx",
+        ))
+        await s.commit()
+
+    resp = await client.get("/api/company-styles?builtin=true")
+    assert resp.status_code == 200
+    company = next(s for s in resp.json() if s["name"] == "某公司")
+    assert company["rubric_type"] == "faang"
+
+
+@pytest.mark.asyncio
+async def test_tcl_rubric_type_is_tcl_l2(client: AsyncClient, session_factory):
+    """TCL must have rubric_type=tcl_l2."""
+    async with session_factory() as s:
+        s.add(CompanyStyle(
+            name="TCL", rubric_type="tcl_l2", is_builtin=True,
+            interviewer_style_tags=[], preferred_question_types=[],
+            sample_questions=[], prompt_context_text="ctx",
+        ))
+        await s.commit()
+
+    resp = await client.get("/api/company-styles?builtin=true")
+    assert resp.status_code == 200
+    tcl = next(s for s in resp.json() if s["name"] == "TCL")
+    assert tcl["rubric_type"] == "tcl_l2"
