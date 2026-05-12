@@ -110,7 +110,7 @@ def _build_agent(system_prompt: str) -> BidiAgent:
             # otherwise it waits indefinitely for an explicit contentEnd event
             # and hits its internal 55s "no audio" timeout, killing the session.
             "turn_detection": {
-                "endpointingSensitivity": "MEDIUM",
+                "endpointingSensitivity": "LOW",
             },
         },
         client_config={"region": settings.aws_region},
