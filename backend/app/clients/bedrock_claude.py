@@ -4,6 +4,7 @@ import json
 import time
 
 import boto3
+from botocore.config import Config
 from shared.eval_core.utils import parse_json_strict
 
 from app.config import settings
@@ -13,11 +14,22 @@ PRICE_OUT_PER_1M = 15.0
 
 _client = None
 
+# Claude evaluation prompts can be long; allow up to 120s read timeout.
+_BOTO_CONFIG = Config(
+    connect_timeout=10,
+    read_timeout=120,
+    retries={"max_attempts": 3, "mode": "standard"},
+)
+
 
 def _get_client():
     global _client
     if _client is None:
-        _client = boto3.client("bedrock-runtime", region_name=settings.aws_region)
+        _client = boto3.client(
+            "bedrock-runtime",
+            region_name=settings.aws_region,
+            config=_BOTO_CONFIG,
+        )
     return _client
 
 
