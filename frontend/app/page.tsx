@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { base64FromInt16, int16FromBase64 } from "@/lib/audio-codec";
 import { getAccessToken, ensureValidToken } from "@/lib/auth";
 import { fetchScenarios, type Scenario } from "@/lib/api";
+import { buildWsUrl } from "@/lib/ws-url";
 
 type TranscriptLine = {
   role: "user" | "assistant";
@@ -191,12 +192,7 @@ export default function InterviewDemoPage() {
       //    the first few PCM chunks while WS handshake is in flight.
       //    Ensure token is fresh before connecting (auto-refresh if expired).
       await ensureValidToken();
-      const baseWsUrl = resolveWsUrl();
-      const wsSep = baseWsUrl.includes("?") ? "&" : "?";
-      const wsParams = new URLSearchParams();
-      if (selectedStyleId) wsParams.set("style_id", selectedStyleId);
-      wsParams.set("lang", selectedLang);
-      const ws = new WebSocket(`${baseWsUrl}${wsSep}${wsParams.toString()}`);
+      const ws = new WebSocket(buildWsUrl(resolveWsUrl(), selectedStyleId, selectedLang));
       wsRef.current = ws;
 
       // Mic-frame counter for diagnostics: lets us confirm in the browser
